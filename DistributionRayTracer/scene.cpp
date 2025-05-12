@@ -44,19 +44,57 @@ AABB Triangle::GetBoundingBox() {
 //
 
 HitRecord Triangle::hit(Ray& r) {
-
 	HitRecord rec;
-	rec.t = FLT_MAX;  //not necessary
-	rec.isHit = false;  //not necessary
+	rec.t = FLT_MAX;      // Default to no intersection
+	rec.isHit = false;    // Will be set true if an intersection is found
 
-	/* Calculate the normal */
-	Vector normal = (points[1] - points[0]) % (points[2] - points[1]);  //cross product
-	normal.normalize();
+	// --- Step 1: Compute triangle normal ---
+	Vector normal = (points[1] - points[0]) % (points[2] - points[1]); // cross product of two edges
+	normal.normalize(); // make sure it's a unit vector for later shading
 
-	//PUT HERE YOUR CODE
-	
-	return (rec);
+	// Triangle vertices
+	Vector v0 = points[0];
+	Vector v1 = points[1];
+	Vector v2 = points[2];
+
+	// --- Step 2: Möller–Trumbore intersection ---
+	Vector edge1 = v1 - v0;  // Edge from v0 to v1
+	Vector edge2 = v2 - v0;  // Edge from v0 to v2
+
+	Vector h = r.direction % edge2;  // Cross product between ray direction and edge2
+	float a = edge1 * h;             // Dot product: if close to 0, ray is parallel to triangle
+
+	if (fabs(a) < EPSILON) return rec;  // Parallel -> no hit
+
+	float f = 1.0f / a;
+	Vector s = r.origin - v0;           // Vector from v0 to ray origin
+	float u = f * (s * h);              // Barycentric coordinate u
+
+	if (u < 0.0 || u > 1.0) return rec; // u out of bounds -> outside triangle
+
+	Vector q = s % edge1;              // Cross product of s and edge1
+	float v = f * (r.direction * q);   // Barycentric coordinate v
+
+	if (v < 0.0 || u + v > 1.0) return rec; // v or (u+v) out of bounds -> outside triangle
+
+	// --- Step 3: Compute intersection distance t ---
+	float t = f * (edge2 * q);         // Distance from ray origin to intersection point
+
+	// If t is positive and large enough, it's a valid hit
+	if (t > EPSILON) {
+		rec.t = t;
+		rec.isHit = true;
+
+		// Compute and store the surface normal at the intersection point
+		// (already normalized earlier)
+		rec.normal = (edge1 % edge2).normalize();
+
+		return rec;  // Return successful hit
+	}
+
+	return rec;  // If intersection was behind the ray origin, discard
 }
+
 
 
 Plane::Plane(Vector& a_PN, float a_D)
@@ -166,12 +204,62 @@ HitRecord aaBox::hit(Ray& ray)
 	rec.t = FLT_MAX;
 	rec.isHit = false;
 
-	float t0, t1; //entering and leaving points
+	// --- X slab intersection ---
+	// Compute t-values for intersection with the planes perpendicular to the X-axis
+	float tmin = (min.x - ray.origin.x) / ray.direction.x;
+	float tmax = (max.x - ray.origin.x) / ray.direction.x;
 
-	//PUT HERE YOUR CODE
-		return (rec);
-	
+	// Ensure tmin <= tmax
+	if (tmin > tmax) std::swap(tmin, tmax);
+
+	// --- Y slab intersection ---
+	float tymin = (min.y - ray.origin.y) / ray.direction.y;
+	float tymax = (max.y - ray.origin.y) / ray.direction.y;
+	if (tymin > tymax) std::swap(tymin, tymax);
+
+	// Check for overlap between X and Y intervals.
+	// If the ray misses the box on any axis, there is no intersection.
+	if ((tmin > tymax) || (tymin > tmax)) return rec;
+
+	// Update intersection interval to reflect overlap with Y slab
+	if (tymin > tmin) tmin = tymin;
+	if (tymax < tmax) tmax = tymax;
+
+	// --- Z slab intersection ---
+	float tzmin = (min.z - ray.origin.z) / ray.direction.z;
+	float tzmax = (max.z - ray.origin.z) / ray.direction.z;
+	if (tzmin > tzmax) std::swap(tzmin, tzmax);
+
+	// Final overlap test with Z slab
+	if ((tmin > tzmax) || (tzmin > tmax)) return rec;
+
+	// Update tmin and tmax with the Z slab intersection
+	if (tzmin > tmin) tmin = tzmin;
+	if (tzmax < tmax) tmax = tzmax;
+
+	// If the closest intersection is ahead of the ray origin, it's valid
+	if (tmin > EPSILON) {
+		rec.t = tmin;
+		rec.isHit = true;
+
+		// Compute intersection point
+		Vector hitPoint = ray.origin + ray.direction * tmin;
+
+		// Determine which face was hit by comparing hit point with box boundaries
+		Vector normal(0, 0, 0);
+		if (fabs(hitPoint.x - min.x) < EPSILON) normal = Vector(-1, 0, 0); // Left face
+		else if (fabs(hitPoint.x - max.x) < EPSILON) normal = Vector(1, 0, 0); // Right face
+		else if (fabs(hitPoint.y - min.y) < EPSILON) normal = Vector(0, -1, 0); // Bottom face
+		else if (fabs(hitPoint.y - max.y) < EPSILON) normal = Vector(0, 1, 0); // Top face
+		else if (fabs(hitPoint.z - min.z) < EPSILON) normal = Vector(0, 0, -1); // Back face
+		else if (fabs(hitPoint.z - max.z) < EPSILON) normal = Vector(0, 0, 1); // Front face
+
+		rec.normal = normal;  // Store surface normal for shading
+	}
+
+	return rec; // Return hit info; unchanged if no valid intersection
 }
+
 
 
 Scene::Scene()

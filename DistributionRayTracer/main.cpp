@@ -283,6 +283,13 @@ void timer(int value)
 
 ///////////////////////////////////////////////////YOUR CODE HERE////////////////////////////////////////////////////////////////////////
 
+float schlick(float cosTheta, float ior1, float ior2) {
+	float r0 = (ior1 - ior2) / (ior1 + ior2);
+	r0 = r0 * r0;
+	return r0 + (1.0f - r0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+
 Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index of refraction of medium 1 where the ray is travelling
 {
 	Color color_Acc; //Class constructor init the color with zero
@@ -296,10 +303,11 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	int num_lights = scene->getNumLights();
 	skybox_flg = scene->GetSkyBoxFlg();
 	Accel_Struct = scene->GetAccelStruct();   //Type of acceleration data structure
+	int num_objects = scene->getNumObjects();
 
 	if (Accel_Struct == NONE) {  //no acceleration
-		/* Get the closest intersection*/
-		int num_objects = scene->getNumObjects();
+
+		// Find closest hit
 		Object* obj = NULL;
 
 		for (int i = 0; i < num_objects; i++)
@@ -313,13 +321,12 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 				hitObj = obj;
 
 			}
-			//COMPLETE THE CODE
 		}
 
 		if (hitObj == NULL) {  // No intersected object
 			if (skybox_flg)  //skybox cubemap overrides background color 
-				//color_Acc = scene->GetSkyboxColor(ray);
-				color_Acc = (scene->GetBackgroundColor()); //just temporarily
+				color_Acc = scene->GetSkyboxColor(ray);
+				//color_Acc = (scene->GetBackgroundColor()); //just temporarily
 			else
 				color_Acc = (scene->GetBackgroundColor());
 
@@ -353,18 +360,121 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	N = closestHit.normal;
 
 	//CALCULATE THE COLOR OF THE PIXEL
-	for (int j = 0; j < num_lights; j++) {
-		Light* curlight = scene->getLight(j);
-		Vector L = (curlight->position - hitPoint).normalize();
-		Vector h = (L + ray.direction).normalize();
 
-		if (L * N > 0) {
-			//printf("OI");
-			color_Acc += (hitObj->GetMaterial()->GetDiffColor() * hitObj->GetMaterial()->GetDiffuse()) * (N * L) + (hitObj->GetMaterial()->GetSpecColor() * hitObj->GetMaterial()->GetSpecular()) * pow(h * L, hitObj->GetMaterial()->GetShine());
+	Material* mat = hitObj->GetMaterial();
+
+	Color kd = mat->GetDiffColor();
+	Color ks = mat->GetSpecColor();
+	float kr = mat->GetReflection();
+	float diff = mat->GetDiffuse();
+	float spec = mat->GetSpecular();
+	float shine = mat->GetShine();
+
+	// Ambient term (can be improved by using a fixed I_a value)
+	Color ambientLight = scene->GetBackgroundColor();
+	color_Acc = ambientLight * kd;
+
+
+	for (int j = 0; j < num_lights; j++) {
+		Light* light = scene->getLight(j);
+		Vector L = (light->position - hitPoint).normalize();
+		Vector V = - ray.direction.normalize(); // view vector
+		Vector H = (L + V).normalize();
+
+		float NdotL = std::max(N * L, 0.0f);
+		float NdotH = std::max(N * H, 0.0f);
+
+		// === Shadow ray ===
+		Ray shadowRay(hitPoint + L * 1e-4f, L); // offset a bit to avoid acne
+		bool inShadow = false;
+
+		for (int o = 0; o < num_objects; o++) {
+			if (scene->getObject(o) == hitObj) continue; // skip self
+			HitRecord shadowHit = scene->getObject(o)->hit(shadowRay);
+			if (shadowHit.isHit && shadowHit.t > 1e-4f && shadowHit.t < (light->position - hitPoint).length()) {
+				inShadow = true;
+				break;
+			}
 		}
 
-		if (depth > MAX_DEPTH)
-			return color_Acc;
+		
+
+		if (!inShadow) {
+			Color lightColor = light->emission;
+
+			Color diffuseTerm = kd * diff * NdotL;
+			Color specularTerm = ks * spec * pow(NdotH, shine);
+
+			color_Acc += (diffuseTerm + specularTerm);
+		}
+
+		// === Reflection and Refraction ===
+		//if (depth < MAX_DEPTH) {
+		//	if (kr > 0.0f) {
+		//		Vector V = - ray.direction.normalize();       // View direction
+		//		Vector N = closestHit.normal.normalize();    // Surface normal
+
+		//		// Compute reflection direction: r = V - 2 * (V · N) * N
+		//		Vector reflectDir = N * 2.0f * (V * N) - V;
+		//		reflectDir = reflectDir.normalize();
+
+		//		// Trace reflected ray
+		//		Ray reflectRay(hitPoint + reflectDir * 1e-4f, reflectDir);
+		//		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
+
+		//		// Add reflection contribution scaled by kr
+		//		reflectColor *= kr;
+		//		color_Acc = color_Acc * (1.0f - kr) + reflectColor;
+		//	};
+		//}
+
+		if (depth < MAX_DEPTH) {
+			Vector V = -ray.direction.normalize();  // View direction
+			Vector Nn = N.normalize();              // Surface normal
+			float NdotV = std::max(Nn * V, 0.0f);
+
+			// Flip normal if hitting from inside (important for refraction)
+			bool outside = (ray.direction * Nn) < 0.0f;
+			Vector normal = outside ? Nn : -Nn;
+
+			// === Reflection ===
+			Vector reflectDir = ray.direction - normal * (ray.direction * normal) * 2.0f;
+			reflectDir.normalize();
+			Ray reflectRay(hitPoint + reflectDir * 1e-4f, reflectDir);
+			Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
+
+			Color refractColor(0, 0, 0);
+			float kr_fresnel = kr;
+
+			// === Refraction (only if material is transparent) ===
+			float ior2 = mat->GetRefrIndex();
+			if (mat->GetTransmittance() > 0.0f) {
+				float eta = outside ? ior_1 / ior2 : ior2 / ior_1;
+				float cosi = clamp(ray.direction * normal, -1.0f, 1.0f);
+				float sint2 = eta * eta * (1.0f - cosi * cosi);
+
+				if (sint2 <= 1.0f) {  // No total internal reflection
+					float cost = sqrtf(1.0f - sint2);
+					Vector refractDir =  ray.direction * eta + normal * (eta * cosi - cost);
+					refractDir.normalize();
+
+					Ray refractRay(hitPoint + refractDir * 1e-4f, refractDir);
+					refractColor = rayTracing(refractRay, depth + 1, outside ? ior2 : ior_1, lightSample).clamp();
+
+					// === Schlick’s Approximation ===
+					float cosTheta = outside ? NdotV : std::abs(refractDir * normal);
+					kr_fresnel = schlick(cosTheta, ior_1, ior2);
+				}
+				else {
+					kr_fresnel = 1.0f; // Total internal reflection
+				}
+			}
+
+			// Final blend: weighted sum of reflection and refraction
+			Color localLight = color_Acc;
+			color_Acc = localLight * (1.0f - kr) + reflectColor * kr_fresnel + refractColor * (1.0f - kr_fresnel) * mat->GetTransmittance();
+		}
+
 
 		// if reflective
 			//...

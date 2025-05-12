@@ -22,6 +22,7 @@ public:
 	Vector operator=(const Vector& v);
 	Vector operator+( const Vector& v );
 	Vector operator-( const Vector& v );
+	Vector operator-() const;               // Unary minus
 	Vector operator*( float f );
 	float  operator*(const Vector& v);   //inner product
 	Vector operator/( float f );
