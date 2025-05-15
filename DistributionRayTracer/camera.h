@@ -77,7 +77,7 @@ public:
 
 		//PUT YOUR CODE HERE
 		Vector df = (eye - at).length();
-		ray_dir = (u * w * ((pixel_sample.x / res_x) - 0.5) + v * h * ((pixel_sample.y / res_y) - 0.5) - df * n).normalize();
+		ray_dir = (u * w * ((pixel_sample.x / res_x) - 0.5) + v * h * ((pixel_sample.y / res_y) - 0.5) - n * plane_dist).normalize();
 
 		return Ray(eye, ray_dir);
 	}

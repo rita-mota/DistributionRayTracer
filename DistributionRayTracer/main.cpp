@@ -357,132 +357,102 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	}
 
 	hitPoint = ray.origin + ray.direction * closestHit.t;
-	N = closestHit.normal;
+	N = closestHit.normal.normalize();
 
 	//CALCULATE THE COLOR OF THE PIXEL
 
+	bool outside = (ray.direction * N) < 0.0f;
+
 	Material* mat = hitObj->GetMaterial();
 
-	Color kd = mat->GetDiffColor();
-	Color ks = mat->GetSpecColor();
+	Color diff_color = mat->GetDiffColor();
+	Color spec_color= mat->GetSpecColor();
 	float kr = mat->GetReflection();
-	float diff = mat->GetDiffuse();
-	float spec = mat->GetSpecular();
+	float kd = mat->GetDiffuse();
+	float ks = mat->GetSpecular();
 	float shine = mat->GetShine();
-
-	// Ambient term (can be improved by using a fixed I_a value)
-	Color ambientLight = scene->GetBackgroundColor();
-	color_Acc = ambientLight * kd;
-
+	float ior2 = mat->GetRefrIndex();
+	float trans = mat->GetTransmittance();
+	Vector V = -ray.direction.normalize(); // view vector
 
 	for (int j = 0; j < num_lights; j++) {
+
 		Light* light = scene->getLight(j);
 		Vector L = (light->position - hitPoint).normalize();
-		Vector V = - ray.direction.normalize(); // view vector
 		Vector H = (L + V).normalize();
 
 		float NdotL = std::max(N * L, 0.0f);
 		float NdotH = std::max(N * H, 0.0f);
 
 		// === Shadow ray ===
-		Ray shadowRay(hitPoint + L * 1e-4f, L); // offset a bit to avoid acne
+
+		Vector shadowRayNormal = outside ?  N : - N;
+		Ray shadowRay(hitPoint + shadowRayNormal * 1e-4f, L); // offset a bit to avoid acne
 		bool inShadow = false;
 
 		for (int o = 0; o < num_objects; o++) {
 			if (scene->getObject(o) == hitObj) continue; // skip self
 			HitRecord shadowHit = scene->getObject(o)->hit(shadowRay);
-			if (shadowHit.isHit && shadowHit.t > 1e-4f && shadowHit.t < (light->position - hitPoint).length()) {
+			if (shadowHit.isHit && shadowHit.t > 1e-4f && shadowHit.t < L.length()) {
 				inShadow = true;
 				break;
 			}
 		}
 
-		
+
 
 		if (!inShadow) {
-			Color lightColor = light->emission;
 
-			Color diffuseTerm = kd * diff * NdotL;
-			Color specularTerm = ks * spec * pow(NdotH, shine);
+			Color diffuseTerm = diff_color * kd * NdotL;
+			Color specularTerm = spec_color* ks * pow(NdotH, shine);
 
 			color_Acc += (diffuseTerm + specularTerm);
 		}
-
-		// === Reflection and Refraction ===
-		//if (depth < MAX_DEPTH) {
-		//	if (kr > 0.0f) {
-		//		Vector V = - ray.direction.normalize();       // View direction
-		//		Vector N = closestHit.normal.normalize();    // Surface normal
-
-		//		// Compute reflection direction: r = V - 2 * (V · N) * N
-		//		Vector reflectDir = N * 2.0f * (V * N) - V;
-		//		reflectDir = reflectDir.normalize();
-
-		//		// Trace reflected ray
-		//		Ray reflectRay(hitPoint + reflectDir * 1e-4f, reflectDir);
-		//		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
-
-		//		// Add reflection contribution scaled by kr
-		//		reflectColor *= kr;
-		//		color_Acc = color_Acc * (1.0f - kr) + reflectColor;
-		//	};
-		//}
-
-		if (depth < MAX_DEPTH) {
-			Vector V = -ray.direction.normalize();  // View direction
-			Vector Nn = N.normalize();              // Surface normal
-			float NdotV = std::max(Nn * V, 0.0f);
-
-			// Flip normal if hitting from inside (important for refraction)
-			bool outside = (ray.direction * Nn) < 0.0f;
-			Vector normal = outside ? Nn : -Nn;
-
-			// === Reflection ===
-			Vector reflectDir = ray.direction - normal * (ray.direction * normal) * 2.0f;
-			reflectDir.normalize();
-			Ray reflectRay(hitPoint + reflectDir * 1e-4f, reflectDir);
-			Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
-
-			Color refractColor(0, 0, 0);
-			float kr_fresnel = kr;
-
-			// === Refraction (only if material is transparent) ===
-			float ior2 = mat->GetRefrIndex();
-			if (mat->GetTransmittance() > 0.0f) {
-				float eta = outside ? ior_1 / ior2 : ior2 / ior_1;
-				float cosi = clamp(ray.direction * normal, -1.0f, 1.0f);
-				float sint2 = eta * eta * (1.0f - cosi * cosi);
-
-				if (sint2 <= 1.0f) {  // No total internal reflection
-					float cost = sqrtf(1.0f - sint2);
-					Vector refractDir =  ray.direction * eta + normal * (eta * cosi - cost);
-					refractDir.normalize();
-
-					Ray refractRay(hitPoint + refractDir * 1e-4f, refractDir);
-					refractColor = rayTracing(refractRay, depth + 1, outside ? ior2 : ior_1, lightSample).clamp();
-
-					// === Schlick’s Approximation ===
-					float cosTheta = outside ? NdotV : std::abs(refractDir * normal);
-					kr_fresnel = schlick(cosTheta, ior_1, ior2);
-				}
-				else {
-					kr_fresnel = 1.0f; // Total internal reflection
-				}
-			}
-
-			// Final blend: weighted sum of reflection and refraction
-			Color localLight = color_Acc;
-			color_Acc = localLight * (1.0f - kr) + reflectColor * kr_fresnel + refractColor * (1.0f - kr_fresnel) * mat->GetTransmittance();
-		}
-
-
-		// if reflective
-			//...
-
-		//if transparent
-			//...
 	}
 
+	if (depth >= MAX_DEPTH) {
+		return color_Acc;
+	}
+
+
+	ior_1 = outside ? ior_1 : ior2; // index of refraction of the medium where the ray is travelling, before the separation
+	ior2 = outside ? ior2 : ior_1;
+	float eta = ior_1 / ior2;
+	Vector Vt = N * (V * N) - V;
+	Vector t = Vt.normalize();
+	float sin_i = Vt.length();
+	float sin_t = eta * sin_i;
+	float sin_t2 = pow(sin_t, 2);
+	float cos_t = sqrt(1 - sin_t2);
+	Vector r_t = t * sin_t + (-N) * cos_t;
+
+	// === Schlick’s Approximation ===
+	float cos_i = sqrt(1 - pow(sin_i, 2));
+	float kr_fresnel = schlick(cos_i, ior_1, ior2);
+
+	if (ks > 0) {
+		// === Reflection ===
+		Vector reflectDir = N * (V * N) * 2.0f - V;
+		reflectDir.normalize();
+		Ray reflectRay(hitPoint + N * 1e-4f, reflectDir);
+		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
+		float k_ref = trans > 0 ? kr_fresnel : ks;
+
+		color_Acc += reflectColor * k_ref * spec_color;
+	}
+
+	if (trans > 0.0f) {
+
+		Ray refractRay(hitPoint + N * 1e-4f, r_t);
+		Color refractColor = rayTracing(refractRay, depth + 1, ior_1, lightSample).clamp();
+
+		Color one = Color(1.0f, 1.0f, 1.0f).clamp();
+		refractColor = outside ? refractColor : refractColor * ((one - diff_color) * (-closestHit.t)).exp_();
+
+		color_Acc += refractColor * (1-kr_fresnel);
+
+	}
+	
 	return color_Acc.clamp();
 }
 
