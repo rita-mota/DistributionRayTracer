@@ -285,7 +285,7 @@ void timer(int value)
 
 float schlick(float cosTheta, float ior1, float ior2) {
 	float r0 = (ior1 - ior2) / (ior1 + ior2);
-	r0 = r0 * r0;
+	r0 = pow(r0, 2);
 	return r0 + (1.0f - r0) * pow(1.0f - cosTheta, 5.0f);
 }
 
@@ -363,6 +363,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 	bool outside = (ray.direction * N) < 0.0f;
 
+	if (!outside) N = -N;
+
 	Material* mat = hitObj->GetMaterial();
 
 	Color diff_color = mat->GetDiffColor();
@@ -375,6 +377,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	float trans = mat->GetTransmittance();
 	Vector V = -ray.direction.normalize(); // view vector
 
+	float offset = 1e-4f;
+
 	for (int j = 0; j < num_lights; j++) {
 
 		Light* light = scene->getLight(j);
@@ -386,20 +390,18 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 		// === Shadow ray ===
 
-		Vector shadowRayNormal = outside ?  N : - N;
-		Ray shadowRay(hitPoint + shadowRayNormal * 1e-4f, L); // offset a bit to avoid acne
+		Ray shadowRay(hitPoint + N * offset, L); // offset a bit to avoid acne
 		bool inShadow = false;
+		
 
 		for (int o = 0; o < num_objects; o++) {
 			if (scene->getObject(o) == hitObj) continue; // skip self
 			HitRecord shadowHit = scene->getObject(o)->hit(shadowRay);
-			if (shadowHit.isHit && shadowHit.t > 1e-4f && shadowHit.t < L.length()) {
+			if (shadowHit.isHit && shadowHit.t > offset && shadowHit.t < L.length()) {
 				inShadow = true;
 				break;
 			}
 		}
-
-
 
 		if (!inShadow) {
 
@@ -410,47 +412,66 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
-	if (depth >= MAX_DEPTH) {
+	if (depth > MAX_DEPTH) {
 		return color_Acc;
 	}
 
-
-	ior_1 = outside ? ior_1 : ior2; // index of refraction of the medium where the ray is travelling, before the separation
-	ior2 = outside ? ior2 : ior_1;
+	float kr_fresnel = kr;
+	if (!outside) ior2 = 1.0;
 	float eta = ior_1 / ior2;
 	Vector Vt = N * (V * N) - V;
-	Vector t = Vt.normalize();
 	float sin_i = Vt.length();
+	Vector t = Vt/Vt.length();
 	float sin_t = eta * sin_i;
-	float sin_t2 = pow(sin_t, 2);
-	float cos_t = sqrt(1 - sin_t2);
-	Vector r_t = t * sin_t + (-N) * cos_t;
 
-	// === Schlick’s Approximation ===
-	float cos_i = sqrt(1 - pow(sin_i, 2));
-	float kr_fresnel = schlick(cos_i, ior_1, ior2);
+	if (trans == 1 && sin_t < 1) {00
+
+		float sin_t2 = pow(sin_t, 2);
+		float cos_t = sqrt(1 - sin_t2);
+		Vector r_t = (t * sin_t + (-N) * cos_t).normalize();
+
+		// === Schlick’s Approximation ===
+		float cos_i = N * V;
+		
+		float cosTheta = cos_i;
+
+		if (ior_1 > ior2) {
+			cosTheta = cos_t;
+		}
+		else {
+			cosTheta = cos_i;
+		}
+
+		float r0 = (ior_1 - ior2) / (ior_1 + ior2);
+		r0 = pow(r0, 2);
+		kr_fresnel = r0 + (1.0f - r0) * pow((1.0f - cosTheta), 5);
+
+		Ray refractRay(hitPoint - (N * offset), r_t);
+		Color refractColor = rayTracing(refractRay, depth + 1, ior2, lightSample).clamp();
+
+		Color one = Color(1.0f, 1.0f, 1.0f);
+		if (!outside) {
+			refractColor = refractColor * ((one - diff_color) * (-closestHit.t)).exp_();
+			
+		}
+
+		color_Acc += refractColor * (1 -kr_fresnel);
+
+	}
+	else if (trans > 0.0f && sin_t >= 1) {
+		kr_fresnel = 1;
+	}
 
 	if (ks > 0) {
 		// === Reflection ===
 		Vector reflectDir = N * (V * N) * 2.0f - V;
 		reflectDir.normalize();
-		Ray reflectRay(hitPoint + N * 1e-4f, reflectDir);
+		Ray reflectRay(hitPoint + N * offset, reflectDir);
+
 		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
-		float k_ref = trans > 0 ? kr_fresnel : ks;
+		float k_ref = kr_fresnel;
 
 		color_Acc += reflectColor * k_ref * spec_color;
-	}
-
-	if (trans > 0.0f) {
-
-		Ray refractRay(hitPoint + N * 1e-4f, r_t);
-		Color refractColor = rayTracing(refractRay, depth + 1, ior_1, lightSample).clamp();
-
-		Color one = Color(1.0f, 1.0f, 1.0f).clamp();
-		refractColor = outside ? refractColor : refractColor * ((one - diff_color) * (-closestHit.t)).exp_();
-
-		color_Acc += refractColor * (1-kr_fresnel);
-
 	}
 	
 	return color_Acc.clamp();
