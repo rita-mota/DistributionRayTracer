@@ -424,7 +424,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	Vector t = Vt/Vt.length();
 	float sin_t = eta * sin_i;
 
-	if (trans == 1 && sin_t < 1) {00
+	if (trans == 1 && sin_t < 1) {
 
 		float sin_t2 = pow(sin_t, 2);
 		float cos_t = sqrt(1 - sin_t2);
@@ -564,8 +564,19 @@ void renderScene()
 
 				////// ZONE B.1  -  Distribution Ray Tracer: pixel, area light and lens supersampling with jittering (or stratified)
 				if(AA) {  
+					int n = (int)sqrt(spp);
 					#pragma omp parallel for
 					for (int p = 0; p < spp; p++) {
+						index_col = p / n;
+						index_pos = p % n;
+
+						float epsilon_x = (float)rand() / (float)RAND_MAX;
+						float epsilon_y = (float)rand() / (float)RAND_MAX;
+
+						pixel_sample.x = x + (index_pos + epsilon_x) / n;
+						pixel_sample.y = y + (index_col + epsilon_y) / n;
+
+
 						if(!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample);
 						else {        // sample_unit_disk() returns [-1 1] and aperture is the diameter of the lens
 
