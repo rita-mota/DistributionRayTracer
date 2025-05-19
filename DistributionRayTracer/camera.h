@@ -88,6 +88,9 @@ public:
 		Vector eye_offset;
 
 		//PUT YOUR CODE HERE
+
+		ray_dir = (-lens_sample + pixel_sample).normalize(); //confirmar
+		eye_offset = eye + u * lens_sample.x+ v * lens_sample.y;
 		return Ray(eye_offset, ray_dir);
 	}
 };
