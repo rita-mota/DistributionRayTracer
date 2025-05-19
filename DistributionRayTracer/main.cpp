@@ -468,7 +468,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		//reflectDir.normalize();
 		//Ray reflectRay(hitPoint + N * offset, reflectDir);
 
-		float roughness_param = 0.3;
+		float roughness_param = 0.0;
 
 		//Vector S = hitPoint + N * offset + reflectDir + rnd_unit_sphere() * roughness_param;
 		reflectDir = (reflectDir + rnd_unit_sphere() * roughness_param).normalize();
