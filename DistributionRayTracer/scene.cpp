@@ -64,7 +64,7 @@ HitRecord Triangle::hit(Ray& r) {
 	Vector h = r.direction % edge2;  // Cross product between ray direction and edge2
 	float a = edge1 * h;             // Dot product: if close to 0, ray is parallel to triangle
 
-	if (fabs(a) < EPSILON) return rec;  // Parallel -> no hit
+	//if (fabs(a) < EPSILON) return rec;  // Parallel -> no hit
 
 	float f = 1.0f / a;
 	Vector s = r.origin - v0;           // Vector from v0 to ray origin
@@ -180,11 +180,9 @@ HitRecord Sphere::hit(Ray& r) {
 
 
 AABB Sphere::GetBoundingBox() {
-	Vector a_min;
-	Vector a_max;
+	Vector a_min = center - Vector(radius, radius, radius);
+	Vector a_max = center + Vector(radius, radius, radius);
 
-	//PUT HERE YOUR CODE
-	
 	return(AABB(a_min, a_max));
 }
 

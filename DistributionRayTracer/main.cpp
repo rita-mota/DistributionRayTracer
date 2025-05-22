@@ -337,8 +337,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	else if (Accel_Struct == GRID_ACC) {  // regular Grid
 		if (!grid_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
-				//color_Acc = scene->GetSkyboxColor(ray);
-				color_Acc = (scene->GetBackgroundColor()); //just temporarily
+				color_Acc = scene->GetSkyboxColor(ray);
+				//color_Acc = (scene->GetBackgroundColor()); //just temporarily
 			else
 				color_Acc = (scene->GetBackgroundColor());
 			return color_Acc.clamp();
@@ -348,8 +348,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	else if (Accel_Struct == BVH_ACC) { //BVH
 		if (!bvh_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
-				//color_Acc = scene->GetSkyboxColor(ray);
-				color_Acc = (scene->GetBackgroundColor()); //just temporarily
+				color_Acc = scene->GetSkyboxColor(ray);
+				//color_Acc = (scene->GetBackgroundColor()); //just temporarily
 			else
 				color_Acc = (scene->GetBackgroundColor());
 			return color_Acc.clamp();
@@ -382,7 +382,9 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	for (int j = 0; j < num_lights; j++) {
 
 		Light* light = scene->getLight(j);
-		Vector L = (light->position - hitPoint).normalize();
+		Vector L = (light->position - hitPoint);
+		Vector Ls = L;
+		L.normalize();
 		Vector H = (L + V).normalize();
 
 		float NdotL = std::max(N * L, 0.0f);
@@ -390,18 +392,32 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 		// === Shadow ray ===
 
-		Ray shadowRay(hitPoint + N * offset, L); // offset a bit to avoid acne
+		Vector shadowDir;
+		if (Accel_Struct == GRID_ACC) {
+			shadowDir = Ls;
+		}
+		else {
+			shadowDir = L;
+		}
+
+		Ray shadowRay(hitPoint + N * offset, shadowDir); // offset a bit to avoid acne
 		bool inShadow = false;
 		
-
-		for (int o = 0; o < num_objects; o++) {
-			if (scene->getObject(o) == hitObj) continue; // skip self
-			HitRecord shadowHit = scene->getObject(o)->hit(shadowRay);
-			if (shadowHit.isHit && shadowHit.t > offset && shadowHit.t < L.length()) {
-				inShadow = true;
-				break;
+		if (Accel_Struct == GRID_ACC) {
+			inShadow = grid_ptr->Traverse(shadowRay);
+		}
+		else {
+			for (int o = 0; o < num_objects; o++) {
+				if (scene->getObject(o) == hitObj) continue; // skip self
+				HitRecord shadowHit = scene->getObject(o)->hit(shadowRay);
+				if (shadowHit.isHit && shadowHit.t > offset && shadowHit.t < L.length()) {
+					inShadow = true;
+					break;
+				}
 			}
 		}
+
+		
 
 		if (!inShadow) {
 
@@ -462,10 +478,13 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		kr_fresnel = 1;
 	}
 
+	float roughness = 0.3;
+
 	if (ks > 0) {
 		// === Reflection ===
-		Vector reflectDir = N * (V * N) * 2.0f - V;
+		Vector reflectDir = N * (V * N) * 2.0f - V;	
 		reflectDir.normalize();
+		
 		Ray reflectRay(hitPoint + N * offset, reflectDir);
 
 		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
