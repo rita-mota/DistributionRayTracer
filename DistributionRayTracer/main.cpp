@@ -482,15 +482,22 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 	if (ks > 0) {
 		// === Reflection ===
-		Vector reflectDir = N * (V * N) * 2.0f - V;	
-		reflectDir.normalize();
-		
+		Vector reflectDir = N * (V * N) * 2.0f - V;
+		//reflectDir.normalize();
+		//Ray reflectRay(hitPoint + N * offset, reflectDir);
+
+		float roughness_param = 0.0;
+
+		//Vector S = hitPoint + N * offset + reflectDir + rnd_unit_sphere() * roughness_param;
+		reflectDir = (reflectDir + rnd_unit_sphere() * roughness_param).normalize();
 		Ray reflectRay(hitPoint + N * offset, reflectDir);
 
 		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
 		float k_ref = kr_fresnel;
 
-		color_Acc += reflectColor * k_ref * spec_color;
+		if (reflectDir*N > 0)
+			color_Acc += reflectColor * k_ref * spec_color;
+
 	}
 	
 	return color_Acc.clamp();
