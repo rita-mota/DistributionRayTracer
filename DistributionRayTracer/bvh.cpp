@@ -160,6 +160,11 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 					bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
 					bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
 
+					if (leftNode->getAABB().isInside(ray.origin))
+						tmpL = 0;
+					if (rightNode->getAABB().isInside(ray.origin))
+						tmpR = 0;
+
 					if (leftHit && rightHit) {
 						if (tmpL <= tmpR) {
 							currentNode = leftNode;
