@@ -25,24 +25,23 @@ int BVH::getNumObjects() { return objects.size(); }
 
 
 void BVH::Build(vector<Object *> &objs) {
-
 		
-			BVHNode *root = new BVHNode();
+	BVHNode *root = new BVHNode();
 
-			Vector min = Vector(FLT_MAX, FLT_MAX, FLT_MAX), max = Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-			AABB world_bbox = AABB(min, max);
+	Vector min = Vector(FLT_MAX, FLT_MAX, FLT_MAX), max = Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+	AABB world_bbox = AABB(min, max);
 
-			for (Object* obj : objs) {
-				AABB bbox = obj->GetBoundingBox();
-				world_bbox.extend(bbox);
-				objects.push_back(obj);
-			}
-			world_bbox.min.x -= EPSILON; world_bbox.min.y -= EPSILON; world_bbox.min.z -= EPSILON;
-			world_bbox.max.x += EPSILON; world_bbox.max.y += EPSILON; world_bbox.max.z += EPSILON;
-			root->setAABB(world_bbox);
-			nodes.push_back(root);
-			build_recursive(0, objects.size(), root); // -> root node takes all the objects
-		}
+	for (Object* obj : objs) {
+		AABB bbox = obj->GetBoundingBox();
+		world_bbox.extend(bbox);
+		objects.push_back(obj);
+	}
+	world_bbox.min.x -= EPSILON; world_bbox.min.y -= EPSILON; world_bbox.min.z -= EPSILON;
+	world_bbox.max.x += EPSILON; world_bbox.max.y += EPSILON; world_bbox.max.z += EPSILON;
+	root->setAABB(world_bbox);
+	nodes.push_back(root);
+	build_recursive(0, objects.size(), root); // -> root node takes all the objects
+}
 
 void BVH::build_recursive(int left_index, int right_index, BVHNode* node) {
     const int LEAF_THRESHOLD = 2; // If the number of objects is less than or equal to this, we make a leaf
@@ -126,154 +125,166 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node) {
 
 
 bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
-			float tmp;
-			bool hit = false;
-			stack<StackItem> hit_stack;
-			HitRecord rec;   //rec.isHit initialized to false and rec.t initialized with FLT_MAX
-			BVHNode* currentNode = nodes[0];
-			//PUT YOUR CODE HERE
+	float tmp;
+	bool hit = false;
+	stack<StackItem> hit_stack;
+	HitRecord rec;   //rec.isHit initialized to false and rec.t initialized with FLT_MAX
+	BVHNode* currentNode = nodes[0];
 
-			Ray localRay = ray;
-			hitRec = rec;
+	Ray localRay = ray;
+	hitRec = rec;
 
-			if (!currentNode->getAABB().hit(localRay, tmp))
-				return false;
+	if (!currentNode->getAABB().hit(localRay, tmp))
+		return false;
 
-			while (true) {
-				if (!currentNode->isLeaf()) {
-					int leftIndex = currentNode->getIndex();
-					BVHNode* leftNode = nodes[leftIndex];
-					BVHNode* rightNode = nodes[leftIndex+1];
+	while (true) {
+		if (!currentNode->isLeaf()) {
+			int leftIndex = currentNode->getIndex();
+			BVHNode* leftNode = nodes[leftIndex];
+			BVHNode* rightNode = nodes[leftIndex+1];
 
-					float tmpL;
-					float tmpR;
-					bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
-					bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
+			float tmpL;
+			float tmpR;
+			bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
+			bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
 
-					if (leftNode->getAABB().isInside(ray.origin))
-						tmpL = 0;
-					if (rightNode->getAABB().isInside(ray.origin))
-						tmpR = 0;
+			if (leftNode->getAABB().isInside(ray.origin))
+				tmpL = 0;
+			if (rightNode->getAABB().isInside(ray.origin))
+				tmpR = 0;
 
-					if (leftHit && rightHit) {
-						if (tmpL <= tmpR) {
-							currentNode = leftNode;
-							//push right to stash
-							hit_stack.push(StackItem(rightNode, tmpR));
-						}
-						else {
-							currentNode = rightNode;
-							//push left to stash
-							hit_stack.push(StackItem(leftNode, tmpL));
-						}
-					}
-					else {
-						if (leftHit) {
-							currentNode = leftNode;
-						}
-						if (rightHit) {
-							currentNode = rightNode;
-						}
-					}
+			if (leftHit && rightHit) {
+				if (tmpL < tmpR) {
+					currentNode = leftNode;
+					hit_stack.push(StackItem(rightNode, tmpR));
 				}
 				else {
-					int nObj = currentNode->getNObjs();
-					int objIndex = currentNode->getIndex();
-					Object* obj;
-					for (int i = 0; i < nObj; i++) {
-						obj = objects[objIndex + i];
-						rec = obj->hit(localRay);
-						if (rec.isHit && rec.t < hitRec.t) {	
-							hitRec = rec;
-							hit_obj = &obj;
-							hit = true;
-						}
-					}
+					currentNode = rightNode;
+					hit_stack.push(StackItem(leftNode, tmpL));
+						
 				}
-
-			while (!hit_stack.empty()) {
-				StackItem stack = hit_stack.top();
-				hit_stack.pop();
-				if (stack.t < hitRec.t) {
-					currentNode = stack.ptr;
-					break;
+				continue;
+			}
+			else {
+				if (leftHit) {
+					currentNode = leftNode;
+					continue;
+				}
+				if (rightHit) {
+					currentNode = rightNode;
+					continue;
 				}
 			}
-
+		}
+		else {
+			int nObj = currentNode->getNObjs();
+			int objIndex = currentNode->getIndex();
+			Object* obj;
+			for (int i = 0; i < nObj; i++) {
+				obj = objects[objIndex + i];
+				rec = obj->hit(localRay);
+				if (rec.isHit && rec.t < hitRec.t) {	
+					hitRec = rec;
+					*hit_obj = obj;
+					hit = true;
+				}
 			}
-		return hit;
+		}
+
+		bool hasBetter = false;
+
+		while (!hit_stack.empty()) {
+			StackItem stack = hit_stack.top();
+			hit_stack.pop();
+			if (stack.t < hitRec.t) {
+				currentNode = stack.ptr;
+				hasBetter = true;
+				break;
+			}
+		}
+
+		if (!hasBetter)
+			break;
 	}
+	return hit;
+}
 
 bool BVH::Traverse(Ray& ray) {  //shadow ray with length
-			float tmp;
-			stack<StackItem> hit_stack;
-			HitRecord rec;
+	float tmp;
+	stack<StackItem> hit_stack;
+	HitRecord rec;
 
-			double length = ray.direction.length(); //distance between light and intersection point
-			ray.direction.normalize();
+	double length = ray.direction.length(); //distance between light and intersection point
+	ray.direction.normalize();
 
-			Ray localRay = ray;
-			BVHNode* currentNode = nodes[0];
+	Ray localRay = ray;
+	BVHNode* currentNode = nodes[0];
 
-			if (!currentNode->getAABB().hit(localRay, tmp))
-				return false;
+	if (!currentNode->getAABB().hit(localRay, tmp))
+		return false;
 
-			while (true) {
-				if (!currentNode->isLeaf()) {
-					int leftIndex = currentNode->getIndex();
-					BVHNode* leftNode = nodes[leftIndex];
-					BVHNode* rightNode = nodes[leftIndex + 1];
+	while (true) {
+		if (!currentNode->isLeaf()) {
+			int leftIndex = currentNode->getIndex();
+			BVHNode* leftNode = nodes[leftIndex];
+			BVHNode* rightNode = nodes[leftIndex + 1];
 
-					float tmpL;
-					float tmpR;
-					bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
-					bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
+			float tmpL;
+			float tmpR;
+			bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
+			bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
 
-					if (leftNode->getAABB().isInside(ray.origin))
-						tmpL = 0;
-					if (rightNode->getAABB().isInside(ray.origin))
-						tmpR = 0;
+			if (leftNode->getAABB().isInside(ray.origin))
+				tmpL = 0;
+			if (rightNode->getAABB().isInside(ray.origin))
+				tmpR = 0;
 
-					if (leftHit && rightHit) {
-						if (tmpL <= tmpR) {
-							currentNode = leftNode;
-							//push right to stash
-							hit_stack.push(StackItem(rightNode, tmpR));
-						}
-						else {
-							currentNode = rightNode;
-							//push left to stash
-							hit_stack.push(StackItem(leftNode, tmpL));
-						}
-					}
-					else {
-						if (leftHit) {
-							currentNode = leftNode;
-						}
-						if (rightHit) {
-							currentNode = rightNode;
-						}
-					}
+			if (leftHit && rightHit) {
+				if (tmpL <= tmpR) {
+					currentNode = leftNode;
+					//push right to stash
+					hit_stack.push(StackItem(rightNode, tmpR));
+		
 				}
 				else {
-					int nObj = currentNode->getNObjs();
-					int objIndex = currentNode->getIndex();
-					Object* obj;
-					for (int i = 0; i < nObj; i++) {
-						obj = objects[objIndex + i];
-						rec = obj->hit(localRay);
-						if (rec.isHit)
-							return true;
-					}
+					currentNode = rightNode;
+					//push left to stash
+					hit_stack.push(StackItem(leftNode, tmpL));
+							
 				}
-
-				if (hit_stack.empty())
-					return false;
-
-				StackItem stack = hit_stack.top();
-				currentNode = stack.ptr;
-				hit_stack.pop();
+				continue;
 			}
+			else {
+				if (leftHit) {
+					currentNode = leftNode;
+					continue;
+				}
+				if (rightHit) {
+					currentNode = rightNode;
+					continue;
+							
+				}
+			}
+		}
+		else {
+			int nObj = currentNode->getNObjs();
+			int objIndex = currentNode->getIndex();
+			Object* obj;
+			for (int i = 0; i < nObj; i++) {
+				obj = objects[objIndex + i];
+				rec = obj->hit(localRay);
+				if (rec.isHit)
+					return true;
+			}
+		}
 
-			return false;  //no primitive intersection		
-	}		
+		if (hit_stack.empty())
+			return false;
+
+		StackItem stack = hit_stack.top();
+		currentNode = stack.ptr;
+		hit_stack.pop();
+	}
+
+	return false;  //no primitive intersection		
+}		

@@ -326,7 +326,6 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		if (hitObj == NULL) {  // No intersected object
 			if (skybox_flg)  //skybox cubemap overrides background color 
 				color_Acc = scene->GetSkyboxColor(ray);
-				//color_Acc = (scene->GetBackgroundColor()); //just temporarily
 			else
 				color_Acc = (scene->GetBackgroundColor());
 
@@ -338,7 +337,6 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		if (!grid_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
 				color_Acc = scene->GetSkyboxColor(ray);
-				//color_Acc = (scene->GetBackgroundColor()); //just temporarily
 			else
 				color_Acc = (scene->GetBackgroundColor());
 			return color_Acc.clamp();
@@ -349,7 +347,6 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		if (!bvh_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
 				color_Acc = scene->GetSkyboxColor(ray);
-				//color_Acc = (scene->GetBackgroundColor()); //just temporarily
 			else
 				color_Acc = (scene->GetBackgroundColor());
 			return color_Acc.clamp();
@@ -405,6 +402,9 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		
 		if (Accel_Struct == GRID_ACC) {
 			inShadow = grid_ptr->Traverse(shadowRay);
+		}
+		else if (Accel_Struct == BVH_ACC) {
+			inShadow = bvh_ptr->Traverse(shadowRay);
 		}
 		else {
 			for (int o = 0; o < num_objects; o++) {
