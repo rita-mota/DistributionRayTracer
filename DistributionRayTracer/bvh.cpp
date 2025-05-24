@@ -199,8 +199,6 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 					break;
 				}
 			}
-			if (hit_stack.empty())
-				return hit;
 
 			}
 		return hit;
