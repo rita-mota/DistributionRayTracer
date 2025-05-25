@@ -63,12 +63,7 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 	const int LEAF_THRESHOLD = 2;
 	int n_objects = right_index - left_index;
 
-	std::string indent(depth * 2, ' ');
-	std::cout << indent << " Building BVH node [" << left_index << ", " << right_index << ")"
-		<< " with " << n_objects << " objects" << std::endl;
-
 	if (n_objects <= LEAF_THRESHOLD) {
-		std::cout << indent << " Creating leaf with " << n_objects << " objects starting at index " << left_index << std::endl;
 		node->makeLeaf(left_index, n_objects);
 		return;
 	}
@@ -77,9 +72,6 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 	int axis = 0;
 	if (box.max.y > box.max.x) axis = 1;
 	if (box.max.z > box.max.getAxisValue(axis)) axis = 2;
-
-	std::cout << indent << "Splitting along axis: " << axis
-		<< " (range: " << box.min.getAxisValue(axis) << " to " << box.max.getAxisValue(axis) << ")" << std::endl;
 
 	Comparator cmp{};
 	cmp.dimension = axis;
@@ -103,11 +95,9 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 	}
 
 	if (split_index <= left_index || split_index >= right_index) {
-		std::cout << indent << "Degenerate split, falling back to median" << std::endl;
 		split_index = (left_index + right_index) / 2;
 	}
 
-	std::cout << indent << "Final split index: " << split_index << std::endl;
 
 	BVHNode* left_node = new BVHNode();
 	BVHNode* right_node = new BVHNode();
@@ -126,9 +116,6 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 	right_node->setAABB(right_bbox);
 	nodes.push_back(left_node);
 	nodes.push_back(right_node);
-
-	std::cout << indent << " Left AABB:  min=" << left_bbox.min << " max=" << left_bbox.max << std::endl;
-	std::cout << indent << " Right AABB: min=" << right_bbox.min << " max=" << right_bbox.max << std::endl;
 
 	build_recursive(left_index, split_index, left_node, depth + 1);
 	build_recursive(split_index, right_index, right_node, depth + 1);
