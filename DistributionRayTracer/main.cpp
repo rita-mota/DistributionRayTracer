@@ -88,7 +88,7 @@ int WindowHandle = 0;
 bool AA = false;
 unsigned int spp; //samples per pixel
 bool DOF = false;
-bool SoftShadows = false;
+bool SoftShadows = true;
 
 accelerator Accel_Struct = NONE;
 
@@ -377,13 +377,29 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 	float offset = 1e-4f;
 
+	// ========== SOFT SHADOWS ==========
+	Vector lightPos;
 	for (int j = 0; j < num_lights; j++) {
 
 		Light* light = scene->getLight(j);
-		Vector L = (light->position - hitPoint);
+		float lightDist;
+
+		if (light->type == QUAD) {
+			// Use jittered sampling for quad lights
+			lightPos = light->getAreaLightPoint(lightSample); //GET JITTERED LIGHT SAMPLE IN THE QUAD LIGHT PERIMETER!!
+		}
+		else {  // Point light
+			lightPos = light->position;
+		}
+
+
+		Vector L = lightPos - hitPoint;
 		Vector Ls = L;
 		L.normalize();
 		Vector H = (L + V).normalize();
+
+		lightDist = Ls.length();
+
 
 		float NdotL = std::max(N * L, 0.0f);
 		float NdotH = std::max(N * H, 0.0f);
@@ -464,7 +480,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		kr_fresnel = r0 + (1.0f - r0) * pow((1.0f - cosTheta), 5);
 
 		Ray refractRay(hitPoint - (N * offset), r_t);
-		Color refractColor = rayTracing(refractRay, depth + 1, ior2, lightSample).clamp();
+		Color refractColor = rayTracing(refractRay, depth + 1, ior2, lightPos).clamp();
 
 		Color one = Color(1.0f, 1.0f, 1.0f);
 		if (!outside) {
@@ -493,7 +509,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		reflectDir = (reflectDir + rnd_unit_sphere() * roughness_param).normalize();
 		Ray reflectRay(hitPoint + N * offset, reflectDir);
 
-		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightSample).clamp();
+		Color reflectColor = rayTracing(reflectRay, depth + 1, ior_1, lightPos).clamp();
 		float k_ref = kr_fresnel;
 
 		if (reflectDir*N > 0)
@@ -601,19 +617,41 @@ void renderScene()
 				////// ZONE B.1  -  Distribution Ray Tracer: pixel, area light and lens supersampling with jittering (or stratified)
 				if(AA) {  
 					int n = (int)sqrt(spp);
-					#pragma omp parallel for
+
+					// Create arrays for jittered samples
+					Vector* r = new Vector[spp]; // pixel samples
+					Vector* s = new Vector[spp]; // light samples
+
+					// Generate jittered samples for pixels and lights
 					for (int p = 0; p < spp; p++) {
 						index_col = p / n;
 						index_pos = p % n;
 
+						// Jittered samples for pixel
 						float epsilon_x = (float)rand() / (float)RAND_MAX;
 						float epsilon_y = (float)rand() / (float)RAND_MAX;
+						r[p] = Vector((index_pos + epsilon_x) / n, (index_col + epsilon_y) / n, 0.0f);
 
-						pixel_sample.x = x + (index_pos + epsilon_x) / n;
-						pixel_sample.y = y + (index_col + epsilon_y) / n;
+						// Jittered samples for light
+						epsilon_x = (float)rand() / (float)RAND_MAX;
+						epsilon_y = (float)rand() / (float)RAND_MAX;
+						s[p] = Vector(epsilon_x, epsilon_y, 0.0f);
+					}
 
+					// Shuffle the light samples
+					for (int i = spp - 1; i > 0; i--) {
+						int j = rand() % (i + 1); // random integer between 0 and i
+						// Swap elements i and j
+						Vector temp = s[i];
+						s[i] = s[j];
+						s[j] = temp;
+					}
 
-						if(!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
+#pragma omp parallel for
+					for (int p = 0; p < spp; p++) {
+						pixel_sample = Vector(x + r[p].x, y + r[p].y, 0.0f);
+
+						if (!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
 						else {        // sample_unit_disk() returns [-1 1] and aperture is the diameter of the lens
 
 							Vector lens_sample = rnd_unit_disk() * scene->GetCamera()->GetAperture() / 2.0f;  // lens sample in Camera coordinates
@@ -623,21 +661,43 @@ void renderScene()
 						}
 
 						/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
-						color += rayTracing(ray, 1, 1.0, light_sample);
+						color += rayTracing(ray, 1, 1.0, s[p]);
 					}
-					color *= 1.0/((float)spp);
+					color *= 1.0 / ((float)spp);
+
+					// Clean up
+					delete[] r;
+					delete[] s;
 				}
 
 				//ZONE B.2  - Whitted ray tracer  (without antialiasing)
 				else {	
 
-					pixel_sample.x = x + 0.5f;  
+					pixel_sample.x = x + 0.5f;
 					pixel_sample.y = y + 0.5f;
-
-					/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
 					Ray ray1 = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
-					/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
-					color = rayTracing(ray1, 1, 1.0, light_sample);  //light_sample is a dummy variable in this case, 
+
+					// Regular sampling for soft shadows when no AA
+					if (SoftShadows) {
+						Light* light = scene->getLight(0);
+						const int lightSamples = light->gridRes; // 4x4 grid usually
+						Color tempColor;
+
+						for (int s = 0; s < lightSamples; s++) {
+							// Calculate regular grid coordinates
+							int gridSize = (int)sqrt(lightSamples);
+							float u = (s % gridSize + 0.5f) / gridSize;
+							float v = (s / gridSize + 0.5f) / gridSize;
+							Vector regularLightSample = Vector(u, v, 0.0f);
+
+							tempColor += rayTracing(ray1, 1, 1.0, regularLightSample);
+						}
+						color = tempColor * (1.0f / lightSamples); // Average the samples
+					}
+					else {
+						// Default center sample for hard shadows
+						color = rayTracing(ray1, 1, 1.0, Vector(0.5f, 0.5f, 0.0f));
+					}
 				}
 
 				if (drawModeEnabled) {
@@ -980,7 +1040,7 @@ void init_scene(void)
 			objs.push_back(scene->getObject(o));
 		}
 		bvh_ptr->Build(objs);
-		bvh_ptr->printNodes();
+		//bvh_ptr->printNodes();
 		printf("BVH built.\n\n");
 	}
 	else
