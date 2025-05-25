@@ -41,6 +41,9 @@ public:
      friend inline
   istream&	operator >>	(istream& s, Vector& v)
 	{ return s >> v.x >> v.y >> v.z; }
+	friend inline std::ostream& operator<<(std::ostream& os, const Vector& v) {
+		return os << "(" << v.x << ", " << v.y << ", " << v.z << ")";
+	}
   
 };
 

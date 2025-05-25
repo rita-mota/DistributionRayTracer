@@ -87,8 +87,9 @@ public:
 	int getNumObjects();
 	
 	void Build(vector<Object*>& objects);
-	void build_recursive(int left_index, int right_index, BVHNode* node);
+	void build_recursive(int left_index, int right_index, BVHNode* node, int depth);
 	bool Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec);
 	bool Traverse(Ray& ray);
+	void printNodes();
 };
 #endif

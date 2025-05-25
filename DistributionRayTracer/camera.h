@@ -71,7 +71,7 @@ public:
 		v = n % u;
 	}
 
-	Ray PrimaryRay(const Vector& pixel_sample) //  Rays cast from the Eye to a pixel sample which is in Viewport coordinates
+	Ray PrimaryRay(const Vector& pixel_sample, float time = 0.0f) //  Rays cast from the Eye to a pixel sample which is in Viewport coordinates
 	{
 		Vector ray_dir;
 
@@ -79,11 +79,11 @@ public:
 		Vector df = (eye - at).length();
 		ray_dir = (u * w * ((pixel_sample.x / res_x) - 0.5) + v * h * ((pixel_sample.y / res_y) - 0.5) - n * plane_dist).normalize();
 
-		return Ray(eye, ray_dir);
+		return Ray(eye, ray_dir, time);
 	}
 
 
-	Ray PrimaryRay(const Vector& lens_sample, const Vector& pixel_sample) // DOF: Rays cast from  a thin lens sample to a pixel sample
+	Ray PrimaryRay(const Vector& lens_sample, const Vector& pixel_sample, float time = 0.0f) // DOF: Rays cast from  a thin lens sample to a pixel sample
 	{
 		Vector ray_dir;
 		Vector eye_offset;
@@ -97,7 +97,7 @@ public:
 
 		ray_dir = (u * (px - lens_sample.x) + v * (py - lens_sample.y) - n * f).normalize();
 
-		return Ray(eye_offset, ray_dir);
+		return Ray(eye_offset, ray_dir, time);
 	}
 };
 

@@ -29,6 +29,7 @@
 bool drawModeEnabled = true;
 bool P3F_scene = true; //choose between P3F scene or the built-in Peter Shirley scene
 bool Progressive_flg = false;
+bool motion_blur_enabled = false;
 
 #define MAX_DEPTH 4  //number of bounces
 
@@ -528,17 +529,22 @@ void renderScene()
 					Ray ray;
 					Vector pixel_sample;  //viewport coordinates
 					Vector light_sample = Vector(0.0f, 0.0f, 0.0f); // sample in Light coordinates
+					float jitter_time =0;
+					if (motion_blur_enabled == true) {
+						jitter_time = (float)rand() / (float)RAND_MAX; //for motion blur
+					}
+					
 
 					pixel_sample.x = x + rand_double();
 					pixel_sample.y = y + rand_double();
 
-					if (!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample);
+					if (!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
 					else {        // sample_unit_disk() returns [-1 1] and aperture is the diameter of the lens
 
 						Vector lens_sample = rnd_unit_disk() * scene->GetCamera()->GetAperture() / 2.0f;  // lens sample in Camera coordinates
 
 						/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
-						ray = scene->GetCamera()->PrimaryRay(lens_sample, pixel_sample);
+						ray = scene->GetCamera()->PrimaryRay(lens_sample, pixel_sample, jitter_time);
 					}
 					/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
 					color = rayTracing(ray, 1, 1.0, Vector(rand_float(), rand_float(), 0.0f));
@@ -587,6 +593,10 @@ void renderScene()
 				Ray ray;
 				Vector pixel_sample;  //viewport coordinates
 				Vector light_sample = Vector(0.0f, 0.0f, 0.0f); // sample in Light coordinates
+				float jitter_time = 0;
+				if (motion_blur_enabled == true) {
+					jitter_time = (float)rand() / (float)RAND_MAX; //for motion blur
+				}
 
 				////// ZONE B.1  -  Distribution Ray Tracer: pixel, area light and lens supersampling with jittering (or stratified)
 				if(AA) {  
@@ -603,13 +613,13 @@ void renderScene()
 						pixel_sample.y = y + (index_col + epsilon_y) / n;
 
 
-						if(!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample);
+						if(!DOF) ray = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
 						else {        // sample_unit_disk() returns [-1 1] and aperture is the diameter of the lens
 
 							Vector lens_sample = rnd_unit_disk() * scene->GetCamera()->GetAperture() / 2.0f;  // lens sample in Camera coordinates
 
 							/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
-							ray = scene->GetCamera()->PrimaryRay(lens_sample, pixel_sample);
+							ray = scene->GetCamera()->PrimaryRay(lens_sample, pixel_sample, jitter_time);
 						}
 
 						/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
@@ -625,7 +635,7 @@ void renderScene()
 					pixel_sample.y = y + 0.5f;
 
 					/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
-					Ray ray1 = scene->GetCamera()->PrimaryRay(pixel_sample);
+					Ray ray1 = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
 					/////////PROGRAM THE FOLLOWING FUNCTION//////////////////////
 					color = rayTracing(ray1, 1, 1.0, light_sample);  //light_sample is a dummy variable in this case, 
 				}
@@ -899,6 +909,7 @@ void init_scene(void)
 	char input_user[50];
 	char scene_name[70];
 
+
 	scene = new Scene();
 
 	if (P3F_scene) {  //Loading a P3F scene
@@ -969,6 +980,7 @@ void init_scene(void)
 			objs.push_back(scene->getObject(o));
 		}
 		bvh_ptr->Build(objs);
+		bvh_ptr->printNodes();
 		printf("BVH built.\n\n");
 	}
 	else

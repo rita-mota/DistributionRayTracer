@@ -151,7 +151,12 @@ HitRecord Sphere::hit(Ray& r) {
 	rec.t = FLT_MAX;
 	rec.isHit = false;
 
-	Vector oc = r.origin - center;
+	Vector moved_center = center;
+	if (motion_blur_enabled) {
+		velocity.y = 1.0f;
+		moved_center = center + velocity * r.time;
+	}
+	Vector oc = r.origin - moved_center;
 	float a = r.direction * r.direction;
 	float b = 2.0f * (oc * r.direction);
 	float c = (oc * oc) - radius * radius;
@@ -174,7 +179,7 @@ HitRecord Sphere::hit(Ray& r) {
 	}
 
 	rec.isHit = true;
-	rec.normal = (r.origin + r.direction * rec.t - center).normalize();
+	rec.normal = (r.origin + r.direction * rec.t - moved_center).normalize();
 	return rec;
 }
 

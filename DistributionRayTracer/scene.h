@@ -115,6 +115,7 @@ public:
 	virtual HitRecord hit( Ray& r) = 0;
 	virtual AABB GetBoundingBox() { return AABB(); }
 	Vector getCentroid(void) { return GetBoundingBox().centroid(); }
+	bool motion_blur_enabled = false;
 
 protected:
 	Material* m_Material;
@@ -153,11 +154,13 @@ protected:
 class Sphere : public Object
 {
 public:
-	Sphere( Vector& a_center, float a_radius ) : center( a_center ), SqRadius( a_radius * a_radius ), radius( a_radius ) {};
+	Sphere( Vector& a_center, float a_radius ) : center( a_center ), SqRadius( a_radius * a_radius ), radius( a_radius ), velocity(Vector(0.0f, 0.0f, 0.0f)) {};
 	HitRecord hit(Ray& r);
 	AABB GetBoundingBox(void);
+	Vector velocity; // <-- motion vector
 
 private:
+
 	Vector center;
 	float radius, SqRadius;
 };

@@ -40,86 +40,98 @@ void BVH::Build(vector<Object *> &objs) {
 	world_bbox.max.x += EPSILON; world_bbox.max.y += EPSILON; world_bbox.max.z += EPSILON;
 	root->setAABB(world_bbox);
 	nodes.push_back(root);
-	build_recursive(0, objects.size(), root); // -> root node takes all the objects
+	build_recursive(0, objects.size(), root, 1); // -> root node takes all the objects
 }
 
-void BVH::build_recursive(int left_index, int right_index, BVHNode* node) {
-    const int LEAF_THRESHOLD = 2; // If the number of objects is less than or equal to this, we make a leaf
-    int n_objects = right_index - left_index; // Number of objects in this range
+void BVH::printNodes() {
+	for (size_t i = 0; i < nodes.size(); ++i) {
+		BVHNode* node = nodes[i];
+		AABB aabb = node->getAABB();
 
-    // ====== 1. BASE CASE: Make a LEAF node if we have few enough objects ======
-    if (n_objects <= LEAF_THRESHOLD) {
-        node->makeLeaf(left_index, n_objects);
-        return;
-    }
+		std::cout << "Node[" << i << "] ";
+		if (node->isLeaf()) {
+			std::cout << "LEAF";
+		}
+		else {
+			std::cout << "INNER";
+		}
+		std::cout << " | AABB min: " << aabb.min << " max: " << aabb.max << std::endl;
+	}
+}
 
-    // ====== 2. Compute bounding box of object CENTROIDS to determine spatial distribution ======
-    Vector min_c(FLT_MAX, FLT_MAX, FLT_MAX);     // Initialize min corner to +inf
-    Vector max_c(-FLT_MAX, -FLT_MAX, -FLT_MAX);  // Initialize max corner to -inf
+void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int depth) {
+	const int LEAF_THRESHOLD = 2;
+	int n_objects = right_index - left_index;
 
-    for (int i = left_index; i < right_index; ++i) {
-        Vector c = objects[i]->GetBoundingBox().centroid();
-        // Expand bounding box for centroid bounds
-        if (c.x < min_c.x) min_c.x = c.x;
-        if (c.y < min_c.y) min_c.y = c.y;
-        if (c.z < min_c.z) min_c.z = c.z;
-        if (c.x > max_c.x) max_c.x = c.x;
-        if (c.y > max_c.y) max_c.y = c.y;
-        if (c.z > max_c.z) max_c.z = c.z;
-    }
+	std::string indent(depth * 2, ' ');
+	std::cout << indent << " Building BVH node [" << left_index << ", " << right_index << ")"
+		<< " with " << n_objects << " objects" << std::endl;
 
-    // ====== 3. Choose SPLIT AXIS (x, y, or z) by largest extent in centroid bounds ======
-    Vector extent = max_c - min_c;
-    int axis = 0; // Start with x-axis
-    if (extent.y > extent.x) axis = 1;
-    if (extent.z > extent.getAxisValue(axis)) axis = 2;
+	if (n_objects <= LEAF_THRESHOLD) {
+		std::cout << indent << " Creating leaf with " << n_objects << " objects starting at index " << left_index << std::endl;
+		node->makeLeaf(left_index, n_objects);
+		return;
+	}
 
-    // If extent is too small (all centroids are effectively equal), create leaf
-    if (extent.getAxisValue(axis) < 1e-5f) {
-        node->makeLeaf(left_index, n_objects);
-        return;
-    }
+	AABB box = node->getAABB();
+	int axis = 0;
+	if (box.max.y > box.max.x) axis = 1;
+	if (box.max.z > box.max.getAxisValue(axis)) axis = 2;
 
-    // ====== 4. Sort objects in-place by their centroid along the chosen axis ======
-    auto comparator = [axis](Object* a, Object* b) {
-        return a->GetBoundingBox().centroid().getAxisValue(axis) <
-            b->GetBoundingBox().centroid().getAxisValue(axis);
-    };
-    std::sort(objects.begin() + left_index, objects.begin() + right_index, comparator);
+	std::cout << indent << "Splitting along axis: " << axis
+		<< " (range: " << box.min.getAxisValue(axis) << " to " << box.max.getAxisValue(axis) << ")" << std::endl;
 
-    // ====== 5. Find the midpoint for splitting the objects ======
-    int split_index = (left_index + right_index) / 2;
-    if (split_index == left_index || split_index == right_index) {
-        // Fallback to a balanced split if midpoint failed
-        split_index = left_index + (n_objects / 2);
-    }
+	Comparator cmp{};
+	cmp.dimension = axis;
+	std::sort(objects.begin() + left_index, objects.begin() + right_index, cmp);
 
-    // ====== 6. Create child BVH nodes and store them ======
-    BVHNode* left_node = new BVHNode();
-    BVHNode* right_node = new BVHNode();
+	float midpoint = (box.min.getAxisValue(axis) + box.max.getAxisValue(axis)) / 2.0f;
+	int low = left_index;
+	int high = right_index - 1;
+	int split_index = -1;
 
-    int left_node_index = (int)nodes.size(); // Index of left node in 'nodes' vector
-    nodes.push_back(left_node);
-    nodes.push_back(right_node); // Right node implicitly follows
+	while (low <= high) {
+		int mid = (low + high) / 2;
+		float val = objects[mid]->getCentroid().getAxisValue(axis);
+		if (val > midpoint) {
+			split_index = mid;
+			high = mid - 1;
+		}
+		else {
+			low = mid + 1;
+		}
+	}
 
-    node->makeNode(left_node_index); // Register this node as internal with children
+	if (split_index <= left_index || split_index >= right_index) {
+		std::cout << indent << "Degenerate split, falling back to median" << std::endl;
+		split_index = (left_index + right_index) / 2;
+	}
 
-    // ====== 7. Compute and assign AABBs (Axis-Aligned Bounding Boxes) for both children ======
-    AABB left_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
-    AABB right_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
+	std::cout << indent << "Final split index: " << split_index << std::endl;
 
-    for (int i = left_index; i < split_index; ++i)
-        left_bbox.extend(objects[i]->GetBoundingBox());
+	BVHNode* left_node = new BVHNode();
+	BVHNode* right_node = new BVHNode();
+	int left_node_index = nodes.size();
+	node->makeNode(left_node_index);
 
-    for (int i = split_index; i < right_index; ++i)
-        right_bbox.extend(objects[i]->GetBoundingBox());
+	AABB left_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
+	AABB right_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
 
-    left_node->setAABB(left_bbox);
-    right_node->setAABB(right_bbox);
+	for (int i = left_index; i < split_index; ++i)
+		left_bbox.extend(objects[i]->GetBoundingBox());
+	for (int i = split_index; i < right_index; ++i)
+		right_bbox.extend(objects[i]->GetBoundingBox());
 
-    // ====== 8. RECURSIVELY build child nodes ======
-    build_recursive(left_index, split_index, left_node);   // Left subtree
-    build_recursive(split_index, right_index, right_node); // Right subtree
+	left_node->setAABB(left_bbox);
+	right_node->setAABB(right_bbox);
+	nodes.push_back(left_node);
+	nodes.push_back(right_node);
+
+	std::cout << indent << " Left AABB:  min=" << left_bbox.min << " max=" << left_bbox.max << std::endl;
+	std::cout << indent << " Right AABB: min=" << right_bbox.min << " max=" << right_bbox.max << std::endl;
+
+	build_recursive(left_index, split_index, left_node, depth + 1);
+	build_recursive(split_index, right_index, right_node, depth + 1);
 }
 
 
