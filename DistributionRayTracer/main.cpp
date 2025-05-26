@@ -504,7 +504,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	if (ks > 0) {
 		Vector reflectDir = N * (V * N) * 2.0f - V;
 
-		float roughness_param = 0.5;
+		float roughness_param = 0.0;
 
 		reflectDir = (reflectDir + rnd_unit_sphere() * roughness_param).normalize();
 		Ray reflectRay(hitPoint + N * offset, reflectDir);
@@ -676,18 +676,19 @@ void renderScene()
 					pixel_sample.x = x + 0.5f;
 					pixel_sample.y = y + 0.5f;
 					Ray ray1 = scene->GetCamera()->PrimaryRay(pixel_sample, jitter_time);
+					int num_lights = scene->getNumLights();
+					Light* light = scene->getLight(0);
 
 					// Regular sampling for soft shadows when no AA
-					if (SoftShadows) {
-						Light* light = scene->getLight(0);
+					if (light->type == QUAD) {
 						const int lightSamples = light->gridRes; // 4x4 grid usually
-						Color tempColor;
+						Color tempColor; 
 
 						for (int s = 0; s < lightSamples; s++) {
 							// Calculate regular grid coordinates
 							int gridSize = (int)sqrt(lightSamples);
 							float u = (s % gridSize + 0.5f) / gridSize;
-							float v = (s / gridSize + 0.5f) / gridSize;
+							float v = (s / gridSize + 0.5f) / gridSize; 
 							Vector regularLightSample = Vector(u, v, 0.0f);
 
 							tempColor += rayTracing(ray1, 1, 1.0, regularLightSample);
@@ -698,6 +699,7 @@ void renderScene()
 						// Default center sample for hard shadows
 						color = rayTracing(ray1, 1, 1.0, Vector(0.5f, 0.5f, 0.0f));
 					}
+	
 				}
 
 				if (drawModeEnabled) {
