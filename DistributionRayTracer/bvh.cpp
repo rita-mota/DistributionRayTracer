@@ -232,12 +232,13 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 	float tmp;
 	bool hit = false;
 	stack<StackItem> hit_stack;
-	HitRecord rec;   //rec.isHit initialized to false and rec.t initialized with FLT_MAX
+	HitRecord rec;   // initialized with isHit = false and t = FLT_MAX
 	BVHNode* currentNode = nodes[0];
 
 	Ray localRay = ray;
 	hitRec = rec;
 
+	// Early exit if the ray misses the root bounding box
 	if (!currentNode->getAABB().hit(localRay, tmp))
 		return false;
 
@@ -247,16 +248,15 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 			BVHNode* leftNode = nodes[leftIndex];
 			BVHNode* rightNode = nodes[leftIndex + 1];
 
-			float tmpL;
-			float tmpR;
+			float tmpL, tmpR;
 			bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
 			bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
 
-			if (leftNode->getAABB().isInside(ray.origin))
-				tmpL = 0;
-			if (rightNode->getAABB().isInside(ray.origin))
-				tmpR = 0;
+			// Avoid numerical issues if the ray starts inside the AABB
+			if (leftNode->getAABB().isInside(ray.origin)) tmpL = 0;
+			if (rightNode->getAABB().isInside(ray.origin)) tmpR = 0;
 
+			// Traverse the nearer child first, push the farther onto the stack
 			if (leftHit && rightHit) {
 				if (tmpL < tmpR) {
 					currentNode = leftNode;
@@ -265,7 +265,6 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 				else {
 					currentNode = rightNode;
 					hit_stack.push(StackItem(leftNode, tmpL));
-
 				}
 				continue;
 			}
@@ -281,6 +280,7 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 			}
 		}
 		else {
+			// Leaf node: test all objects for intersection
 			int nObj = currentNode->getNObjs();
 			int objIndex = currentNode->getIndex();
 			Object* obj;
@@ -295,8 +295,8 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 			}
 		}
 
+		// Traverse next closest node from the stack if it's potentially closer
 		bool hasBetter = false;
-
 		while (!hit_stack.empty()) {
 			StackItem stack = hit_stack.top();
 			hit_stack.pop();
@@ -313,17 +313,18 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 	return hit;
 }
 
-bool BVH::Traverse(Ray& ray) {  //shadow ray with length
+bool BVH::Traverse(Ray& ray) {  // Shadow ray traversal
 	float tmp;
 	stack<StackItem> hit_stack;
 	HitRecord rec;
 
-	double length = ray.direction.length(); //distance between light and intersection point
-	ray.direction.normalize();
+	double length = ray.direction.length();  // Max distance = light to hit point
+	ray.direction.normalize();               // Normalize for consistent intersection tests
 
 	Ray localRay = ray;
 	BVHNode* currentNode = nodes[0];
 
+	// Early exit if ray misses root AABB
 	if (!currentNode->getAABB().hit(localRay, tmp))
 		return false;
 
@@ -333,28 +334,23 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 			BVHNode* leftNode = nodes[leftIndex];
 			BVHNode* rightNode = nodes[leftIndex + 1];
 
-			float tmpL;
-			float tmpR;
+			float tmpL, tmpR;
 			bool leftHit = leftNode->getAABB().hit(localRay, tmpL);
 			bool rightHit = rightNode->getAABB().hit(localRay, tmpR);
 
-			if (leftNode->getAABB().isInside(ray.origin))
-				tmpL = 0;
-			if (rightNode->getAABB().isInside(ray.origin))
-				tmpR = 0;
+			// Fix near-zero distances if inside box
+			if (leftNode->getAABB().isInside(ray.origin)) tmpL = 0;
+			if (rightNode->getAABB().isInside(ray.origin)) tmpR = 0;
 
+			// Prioritize nearer node, stash the other
 			if (leftHit && rightHit) {
 				if (tmpL <= tmpR) {
 					currentNode = leftNode;
-					//push right to stash
 					hit_stack.push(StackItem(rightNode, tmpR));
-
 				}
 				else {
 					currentNode = rightNode;
-					//push left to stash
 					hit_stack.push(StackItem(leftNode, tmpL));
-
 				}
 				continue;
 			}
@@ -366,11 +362,11 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 				if (rightHit) {
 					currentNode = rightNode;
 					continue;
-
 				}
 			}
 		}
 		else {
+			// Check for any intersection within shadow ray length
 			int nObj = currentNode->getNObjs();
 			int objIndex = currentNode->getIndex();
 			Object* obj;
@@ -378,17 +374,18 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 				obj = objects[objIndex + i];
 				rec = obj->hit(localRay);
 				if (rec.isHit && rec.t <= length + EPSILON)
-					return true;
+					return true;  // Early out on shadow hit
 			}
 		}
 
 		if (hit_stack.empty())
 			return false;
 
+		// Continue with next candidate node
 		StackItem stack = hit_stack.top();
 		currentNode = stack.ptr;
 		hit_stack.pop();
 	}
 
-	return false;  //no primitive intersection		
+	return false;
 }
