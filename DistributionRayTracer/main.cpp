@@ -306,7 +306,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	Accel_Struct = scene->GetAccelStruct();   //Type of acceleration data structure
 	int num_objects = scene->getNumObjects();
 
-	if (Accel_Struct == NONE) {  //no acceleration
+	// === No acceleration structure ===
+	if (Accel_Struct == NONE) {  
 
 		// Find closest hit
 		Object* obj = NULL;
@@ -334,6 +335,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
+	// === Grid acceleration ===
 	else if (Accel_Struct == GRID_ACC) {  // regular Grid
 		if (!grid_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
@@ -344,6 +346,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
+	// === BVH acceleration ===
 	else if (Accel_Struct == BVH_ACC) { //BVH
 		if (!bvh_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
@@ -354,15 +357,14 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
+	// === Intersection data ===
 	hitPoint = ray.origin + ray.direction * closestHit.t;
 	N = closestHit.normal.normalize();
+	bool outside = (ray.direction * N) < 0.0f;  // Determine if hit is from outside
+	if (!outside) N = -N;                      // Flip normal if inside
 
-	//CALCULATE THE COLOR OF THE PIXEL
 
-	bool outside = (ray.direction * N) < 0.0f;
-
-	if (!outside) N = -N;
-
+	// === Material parameters ===
 	Material* mat = hitObj->GetMaterial();
 
 	Color diff_color = mat->GetDiffColor();
@@ -373,10 +375,10 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	float shine = mat->GetShine();
 	float ior2 = mat->GetRefrIndex();
 	float trans = mat->GetTransmittance();
-	Vector V = -ray.direction.normalize(); // view vector
+	Vector V = -ray.direction.normalize();     // View direction
+	float offset = 1e-4f;                      // Offset for secondary rays
 
-	float offset = 1e-4f;
-
+	// === Direct illumination (shadows + phong) ===
 	for (int j = 0; j < num_lights; j++) {
 
 		Light* light = scene->getLight(j);
@@ -419,7 +421,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 
 		
-
+		// === If not in shadow, accumulate diffuse + specular ===
 		if (!inShadow) {
 
 			Color diffuseTerm = diff_color * kd * NdotL;
@@ -429,12 +431,12 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
-	if (depth > MAX_DEPTH) {
-		return color_Acc;
-	}
+	// === Recursion depth check ===
+	if (depth > MAX_DEPTH) return color_Acc;
 
+	// === Refraction logic ===
 	float kr_fresnel = kr;
-	if (!outside) ior2 = 1.0;
+	if (!outside) ior2 = 1.0; // inside -> outside transition
 	float eta = ior_1 / ior2;
 	Vector Vt = N * (V * N) - V;
 	float sin_i = Vt.length();
@@ -443,11 +445,12 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 	if (trans == 1 && sin_t < 1) {
 
+		// Compute transmission vector
 		float sin_t2 = pow(sin_t, 2);
 		float cos_t = sqrt(1 - sin_t2);
 		Vector r_t = (t * sin_t + (-N) * cos_t).normalize();
 
-		// === Schlick’s Approximation ===
+		// Schlick's approximation
 		float cos_i = N * V;
 		
 		float cosTheta = cos_i;
@@ -459,15 +462,14 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 			cosTheta = cos_i;
 		}
 
-		float r0 = (ior_1 - ior2) / (ior_1 + ior2);
-		r0 = pow(r0, 2);
+		float r0 = pow((ior_1 - ior2) / (ior_1 + ior2), 2);
 		kr_fresnel = r0 + (1.0f - r0) * pow((1.0f - cosTheta), 5);
 
 		Ray refractRay(hitPoint - (N * offset), r_t);
 		Color refractColor = rayTracing(refractRay, depth + 1, ior2, lightSample).clamp();
 
-		Color one = Color(1.0f, 1.0f, 1.0f);
 		if (!outside) {
+			Color one = Color(1.0f, 1.0f, 1.0f);
 			refractColor = refractColor * ((one - diff_color) * (-closestHit.t)).exp_();
 			
 		}
@@ -479,17 +481,13 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		kr_fresnel = 1;
 	}
 
-	float roughness = 0.3;
-
+	// === Reflection logic ===
 	if (ks > 0) {
-		// === Reflection ===
+
 		Vector reflectDir = N * (V * N) * 2.0f - V;
-		//reflectDir.normalize();
-		//Ray reflectRay(hitPoint + N * offset, reflectDir);
 
 		float roughness_param = 0.0;
 
-		//Vector S = hitPoint + N * offset + reflectDir + rnd_unit_sphere() * roughness_param;
 		reflectDir = (reflectDir + rnd_unit_sphere() * roughness_param).normalize();
 		Ray reflectRay(hitPoint + N * offset, reflectDir);
 
@@ -501,7 +499,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 	}
 	
-	return color_Acc.clamp();
+	return color_Acc.clamp(); // final color with all contributions
 }
 
 
@@ -603,12 +601,15 @@ void renderScene()
 					int n = (int)sqrt(spp);
 					#pragma omp parallel for
 					for (int p = 0; p < spp; p++) {
-						index_col = p / n;
-						index_pos = p % n;
+						index_col = p / n;  // row of the p-th sample
+						index_pos = p % n;  // column of the p-th sample
 
-						float epsilon_x = (float)rand() / (float)RAND_MAX;
+						// === Generate random jitter for subpixel sampling (anti-aliasing) ===
+						float epsilon_x = (float)rand() / (float)RAND_MAX; // random float in [0,1)
 						float epsilon_y = (float)rand() / (float)RAND_MAX;
 
+						// === Compute final subpixel sample position (pixel_sample) ===
+						// Adds jitter inside the subcell [index_pos, index_col] in the current pixel (x, y)
 						pixel_sample.x = x + (index_pos + epsilon_x) / n;
 						pixel_sample.y = y + (index_col + epsilon_y) / n;
 
@@ -980,7 +981,6 @@ void init_scene(void)
 			objs.push_back(scene->getObject(o));
 		}
 		bvh_ptr->Build(objs);
-		bvh_ptr->printNodes();
 		printf("BVH built.\n\n");
 	}
 	else

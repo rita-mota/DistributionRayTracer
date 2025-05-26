@@ -60,24 +60,30 @@ void BVH::printNodes() {
 }
 
 void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int depth) {
-	const int LEAF_THRESHOLD = 2;
-	int n_objects = right_index - left_index;
+	const int LEAF_THRESHOLD = 2;                      // Minimum number of objects per leaf
+	int n_objects = right_index - left_index;          // Number of objects in this node's range
 
+	// === BASE CASE: Create a leaf node if there are few enough objects ===
 	if (n_objects <= LEAF_THRESHOLD) {
-		node->makeLeaf(left_index, n_objects);
-		return;
+		node->makeLeaf(left_index, n_objects);         // Store start index and count in the leaf
+		return;                                        // Stop recursion
 	}
 
-	AABB box = node->getAABB();
-	int axis = 0;
-	if (box.max.y > box.max.x) axis = 1;
-	if (box.max.z > box.max.getAxisValue(axis)) axis = 2;
+	// === 1. Determine split axis: choose longest AABB extent ===
+	AABB box = node->getAABB();                        // Bounding box of the current node
+	int axis = 0;                                      // Default to X-axis
+	if (box.max.y > box.max.x) axis = 1;               // Choose Y if taller than wide
+	if (box.max.z > box.max.getAxisValue(axis)) axis = 2; // Choose Z if deeper than current max
 
-	Comparator cmp{};
+	// === 2. Sort the object list by centroid position along chosen axis ===
+	Comparator cmp{};                                  // Custom comparator for sorting
 	cmp.dimension = axis;
 	std::sort(objects.begin() + left_index, objects.begin() + right_index, cmp);
 
+	// === 3. Compute the midpoint of the AABB to use as a spatial split ===
 	float midpoint = (box.min.getAxisValue(axis) + box.max.getAxisValue(axis)) / 2.0f;
+
+	// === 4. Binary search for the first object beyond the midpoint ===
 	int low = left_index;
 	int high = right_index - 1;
 	int split_index = -1;
@@ -94,32 +100,38 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 		}
 	}
 
+	// === Fallback: if no valid split, use median split ===
 	if (split_index <= left_index || split_index >= right_index) {
 		split_index = (left_index + right_index) / 2;
 	}
 
-
+	// === 5. Allocate and prepare two new child BVH nodes ===
 	BVHNode* left_node = new BVHNode();
 	BVHNode* right_node = new BVHNode();
-	int left_node_index = nodes.size();
-	node->makeNode(left_node_index);
+	int left_node_index = nodes.size();                // Index of left node in flat array
 
+	node->makeNode(left_node_index);                   // Store index of first child in current node
+
+	// === 6. Compute bounding boxes for each child node ===
 	AABB left_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
 	AABB right_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
 
 	for (int i = left_index; i < split_index; ++i)
-		left_bbox.extend(objects[i]->GetBoundingBox());
-	for (int i = split_index; i < right_index; ++i)
-		right_bbox.extend(objects[i]->GetBoundingBox());
+		left_bbox.extend(objects[i]->GetBoundingBox());  // Expand left AABB to fit objects
 
-	left_node->setAABB(left_bbox);
+	for (int i = split_index; i < right_index; ++i)
+		right_bbox.extend(objects[i]->GetBoundingBox()); // Expand right AABB to fit objects
+
+	left_node->setAABB(left_bbox);                     // Assign AABBs to new nodes
 	right_node->setAABB(right_bbox);
-	nodes.push_back(left_node);
+	nodes.push_back(left_node);                        // Add new nodes to global list
 	nodes.push_back(right_node);
 
-	build_recursive(left_index, split_index, left_node, depth + 1);
-	build_recursive(split_index, right_index, right_node, depth + 1);
+	// === 7. Recurse into left and right children ===
+	build_recursive(left_index, split_index, left_node, depth + 1);     // Left subtree
+	build_recursive(split_index, right_index, right_node, depth + 1);   // Right subtree
 }
+
 
 
 
