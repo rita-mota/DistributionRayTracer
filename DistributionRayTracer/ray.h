@@ -11,6 +11,6 @@ public:
 
 	Vector origin;
 	Vector direction;
-	float time;
+	float time; //for motion blur
 };
 #endif

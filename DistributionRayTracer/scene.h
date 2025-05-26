@@ -115,7 +115,7 @@ public:
 	virtual HitRecord hit( Ray& r) = 0;
 	virtual AABB GetBoundingBox() { return AABB(); }
 	Vector getCentroid(void) { return GetBoundingBox().centroid(); }
-	bool motion_blur_enabled = true;
+	bool motion_blur_enabled = false; //flag that enables moving center for motion blur
 
 protected:
 	Material* m_Material;

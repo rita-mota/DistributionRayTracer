@@ -39,16 +39,14 @@ AABB Triangle::GetBoundingBox() {
 }
 
 
-//
-// Ray/Triangle intersection test using Tomas Moller-Ben Trumbore algorithm.
-//
 
+// Ray/Triangle intersection test using Tomas Moller-Ben Trumbore algorithm.
 HitRecord Triangle::hit(Ray& r) {
 	HitRecord rec;
 	rec.t = FLT_MAX;      // Default to no intersection
 	rec.isHit = false;    // Will be set true if an intersection is found
 
-	// --- Step 1: Compute triangle normal ---
+	// === 1: Compute triangle normal ===
 	Vector normal = (points[1] - points[0]) % (points[2] - points[1]); // cross product of two edges
 	normal.normalize(); // make sure it's a unit vector for later shading
 
@@ -57,14 +55,12 @@ HitRecord Triangle::hit(Ray& r) {
 	Vector v1 = points[1];
 	Vector v2 = points[2];
 
-	// --- Step 2: Möller–Trumbore intersection ---
+	// === 2: Möller–Trumbore intersection ===
 	Vector edge1 = v1 - v0;  // Edge from v0 to v1
 	Vector edge2 = v2 - v0;  // Edge from v0 to v2
 
 	Vector h = r.direction % edge2;  // Cross product between ray direction and edge2
 	float a = edge1 * h;             // Dot product: if close to 0, ray is parallel to triangle
-
-	//if (fabs(a) < EPSILON) return rec;  // Parallel -> no hit
 
 	float f = 1.0f / a;
 	Vector s = r.origin - v0;           // Vector from v0 to ray origin
@@ -77,7 +73,7 @@ HitRecord Triangle::hit(Ray& r) {
 
 	if (v < 0.0 || u + v > 1.0) return rec; // v or (u+v) out of bounds -> outside triangle
 
-	// --- Step 3: Compute intersection distance t ---
+	// === 3. Compute intersection distance t ===
 	float t = f * (edge2 * q);         // Distance from ray origin to intersection point
 
 	// If t is positive and large enough, it's a valid hit
@@ -117,57 +113,71 @@ Plane::Plane(Vector& P0, Vector& P1, Vector& P2)
    }
 }
 
-//
+
 // Ray/Plane intersection test.
-//
-
-
-HitRecord Plane::hit( Ray& r)
-{
+HitRecord Plane::hit(Ray& r) {
 	HitRecord rec;
-	rec.t = FLT_MAX;
-	rec.isHit = false;
-	float PNxRd;
+	rec.t = FLT_MAX;     // Initialize to maximum distance (no intersection yet)
+	rec.isHit = false;   // Initially assume no hit
 
-	PNxRd = PN * r.direction;
+	float PNxRd = PN * r.direction;  // Dot product between plane normal and ray direction
 
-	// if ray is parallel to the plane the ray misses.
+	// === 1. Check if Ray is Parallel to the Plane ===
+
+	// If dot product is zero (or very close), ray is parallel to plane -> no hit
 	if (fabs(PNxRd) < EPSILON)
-	return rec;
+		return rec;
 
-	float t = -((PN * r.origin) + D)/PNxRd;
+	// === 2. Compute Intersection Point (Parameter t) ===
+
+	// Plane equation: (PN · P) + D = 0
+	// Ray equation: P = O + tD
+	// Solve for t: t = -(PN · O + D) / (PN · D)
+	float t = -((PN * r.origin) + D) / PNxRd;
+
+	// === 3. Check if Intersection is in Front of the Ray ===
+
 	if (t > 0) {
-		rec.t = t;
-		rec.normal = PN;
-		rec.isHit = true;
+		rec.t = t;          // Store intersection distance
+		rec.normal = PN;    // Plane normal is constant everywhere
+		rec.isHit = true;   // Mark intersection as valid
 		return rec;
 	}
 
-	return (rec);
+	// === 4. Otherwise, Return No Hit (Behind the Ray) ===
+	return rec;
 }
+
 
 HitRecord Sphere::hit(Ray& r) {
 	HitRecord rec;
-	rec.t = FLT_MAX;
-	rec.isHit = false;
+	rec.t = FLT_MAX;        // Initialize with maximum distance (no hit yet)
+	rec.isHit = false;      // Mark as no hit initially
 
-	Vector moved_center = center;
+	// === 1. Account for Motion Blur (if enabled) ===
+	Vector moved_center = center; // Default: sphere center is static
 	if (motion_blur_enabled) {
-		velocity.y = 1.0f;
-		moved_center = center + velocity * r.time;
+		velocity.y = 1.0f;  // Assume motion is in the Y direction (for this example)
+		moved_center = center + velocity * r.time; // Move sphere according to ray time
 	}
-	Vector oc = r.origin - moved_center;
-	float a = r.direction * r.direction;
-	float b = 2.0f * (oc * r.direction);
-	float c = (oc * oc) - radius * radius;
-	float discriminant = b * b - 4 * a * c;
 
-	if (discriminant < 0) return rec; // No intersection
+	// === 2. Ray-Sphere Intersection Setup ===
+	Vector oc = r.origin - moved_center;         // Vector from sphere center to ray origin
+	float a = r.direction * r.direction;         // a = dot(D, D)
+	float b = 2.0f * (oc * r.direction);         // b = 2 * dot(oc, D)
+	float c = (oc * oc) - radius * radius;       // c = dot(oc, oc) - R^2
 
+	float discriminant = b * b - 4 * a * c;      // Discriminant of quadratic equation
+
+	// === 3. Check for No Intersection ===
+	if (discriminant < 0) return rec; // Ray misses the sphere
+
+	// === 4. Compute Both Roots of the Quadratic Equation ===
 	float sqrt_discriminant = sqrt(discriminant);
-	float t1 = (-b - sqrt_discriminant) / (2.0f * a);
-	float t2 = (-b + sqrt_discriminant) / (2.0f * a);
+	float t1 = (-b - sqrt_discriminant) / (2.0f * a); // Closer intersection
+	float t2 = (-b + sqrt_discriminant) / (2.0f * a); // Farther intersection
 
+	// === 5. Choose the First Valid Intersection (In Front of Ray) ===
 	if (t1 > EPSILON) {
 		rec.t = t1;
 	}
@@ -175,13 +185,17 @@ HitRecord Sphere::hit(Ray& r) {
 		rec.t = t2;
 	}
 	else {
-		return rec; // Intersection behind the ray
+		return rec; // Both intersections are behind the ray
 	}
 
+	// === 6. Record Hit Information ===
 	rec.isHit = true;
+	// Compute normal at the hit point: (P - Center) normalized
 	rec.normal = (r.origin + r.direction * rec.t - moved_center).normalize();
+
 	return rec;
 }
+
 
 
 AABB Sphere::GetBoundingBox() {

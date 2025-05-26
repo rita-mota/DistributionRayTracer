@@ -29,7 +29,7 @@
 bool drawModeEnabled = true;
 bool P3F_scene = true; //choose between P3F scene or the built-in Peter Shirley scene
 bool Progressive_flg = false;
-bool motion_blur_enabled = true;
+bool motion_blur_enabled = false; //flag that enables motion blur
 
 #define MAX_DEPTH 4  //number of bounces
 
@@ -306,6 +306,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	Accel_Struct = scene->GetAccelStruct();   //Type of acceleration data structure
 	int num_objects = scene->getNumObjects();
 
+	// === No acceleration structure ===
 	if (Accel_Struct == NONE) {  //no acceleration
 
 		// Find closest hit
@@ -334,6 +335,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
+	// === Grid acceleration ===
 	else if (Accel_Struct == GRID_ACC) {  // regular Grid
 		if (!grid_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
@@ -344,7 +346,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
-	else if (Accel_Struct == BVH_ACC) { //BVH
+	// === BVH acceleration ===
+	else if (Accel_Struct == BVH_ACC) { 
 		if (!bvh_ptr->Traverse(ray, &hitObj, closestHit)) {
 			if (skybox_flg)
 				color_Acc = scene->GetSkyboxColor(ray);
@@ -354,15 +357,13 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
+	// === Intersection data ===
 	hitPoint = ray.origin + ray.direction * closestHit.t;
 	N = closestHit.normal.normalize();
+	bool outside = (ray.direction * N) < 0.0f; // Determine if hit is from outside
+	if (!outside) N = -N; // Flip normal if inside
 
-	//CALCULATE THE COLOR OF THE PIXEL
-
-	bool outside = (ray.direction * N) < 0.0f;
-
-	if (!outside) N = -N;
-
+	// === Material parameters ===
 	Material* mat = hitObj->GetMaterial();
 
 	Color diff_color = mat->GetDiffColor();
@@ -373,14 +374,15 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 	float shine = mat->GetShine();
 	float ior2 = mat->GetRefrIndex();
 	float trans = mat->GetTransmittance();
-	Vector V = -ray.direction.normalize(); // view vector
+	Vector V = -ray.direction.normalize(); // View direction
+	float offset = 1e-4f; // Offset for secondary rays
 
-	float offset = 1e-4f;
-
-	// ========== SOFT SHADOWS ==========
+	
 	Vector lightPos;
+	// === Direct illumination (shadows + phong) ===
 	for (int j = 0; j < num_lights; j++) {
 
+		// ========== Soft Shadows ==========
 		Light* light = scene->getLight(j);
 		float lightDist;
 
@@ -438,7 +440,7 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 
 		
-
+		// === If not in shadow, accumulate diffuse + specular ===
 		if (!inShadow) {
 
 			Color diffuseTerm = diff_color * kd * NdotL;
@@ -448,12 +450,12 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		}
 	}
 
-	if (depth > MAX_DEPTH) {
-		return color_Acc;
-	}
+	// === Recursion depth check ===
+	if (depth > MAX_DEPTH) return color_Acc;
 
+	// === Refraction logic ===
 	float kr_fresnel = kr;
-	if (!outside) ior2 = 1.0;
+	if (!outside) ior2 = 1.0; // inside -> outside transition
 	float eta = ior_1 / ior2;
 	Vector Vt = N * (V * N) - V;
 	float sin_i = Vt.length();
@@ -462,11 +464,12 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 
 	if (trans == 1 && sin_t < 1) {
 
+		// Compute transmission vector
 		float sin_t2 = pow(sin_t, 2);
 		float cos_t = sqrt(1 - sin_t2);
 		Vector r_t = (t * sin_t + (-N) * cos_t).normalize();
 
-		// === Schlick’s Approximation ===
+		// Schlick's approximation
 		float cos_i = N * V;
 		
 		float cosTheta = cos_i;
@@ -485,10 +488,9 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		Ray refractRay(hitPoint - (N * offset), r_t);
 		Color refractColor = rayTracing(refractRay, depth + 1, ior2, lightPos).clamp();
 
-		Color one = Color(1.0f, 1.0f, 1.0f);
 		if (!outside) {
-			refractColor = refractColor * ((one - diff_color) * (-closestHit.t)).exp_();
-			
+			Color one = Color(1.0f, 1.0f, 1.0f);
+			refractColor = refractColor * ((one - diff_color) * (-closestHit.t)).exp_();			
 		}
 
 		color_Acc += refractColor * (1 -kr_fresnel);
@@ -498,8 +500,8 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		kr_fresnel = 1;
 	}
 
+	// === Reflection logic ===
 	if (ks > 0) {
-		// === Reflection ===
 		Vector reflectDir = N * (V * N) * 2.0f - V;
 
 		float roughness_param = 0.5;
@@ -622,8 +624,8 @@ void renderScene()
 
 					// Generate jittered samples for pixels and lights
 					for (int p = 0; p < spp; p++) {
-						index_col = p / n;
-						index_pos = p % n;
+						index_col = p / n; // row of the p-th sample
+						index_pos = p % n; // column of the p-th sample
 
 						// Jittered samples for pixel
 						float epsilon_x = (float)rand() / (float)RAND_MAX;

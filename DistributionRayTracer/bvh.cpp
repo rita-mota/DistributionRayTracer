@@ -60,21 +60,23 @@ void BVH::printNodes() {
 }
 
 void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int depth) {
-	const int LEAF_THRESHOLD = 2; // Minimum number of objects per leaf
-	const int BUCKET_COUNT = 12; // Number of bins for SAH
+
+	// === 1. Base Case Check and Parameter Setup ===
+	const int LEAF_THRESHOLD = 2;
+	const int BUCKET_COUNT = 12;
 	const float TRAVERSAL_COST = 1.0f;
 	const float INTERSECTION_COST = 1.0f;
 
-	int n_objects = right_index - left_index; // Number of objects in this node's range
+	int n_objects = right_index - left_index;
 
-	// === BASE CASE: Create a leaf node if there are few enough objects ===
+	// If the node contains very few objects, make it a leaf node
 	if (n_objects <= LEAF_THRESHOLD) {
 		node->makeLeaf(left_index, n_objects);
 		return;
 	}
 
+	// ===2. Calculate Parent Node Surface Area ===
 	AABB box = node->getAABB();
-	// Calculate parent surface area directly
 	Vector extent = box.max - box.min;
 	float parent_surface_area = 2.0f * (extent.x * extent.y + extent.x * extent.z + extent.y * extent.z);
 
@@ -82,14 +84,14 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 	float best_cost = FLT_MAX;
 	int best_split = left_index;
 
-	// Try all 3 axes
+	// === 3. Loop Over All 3 Axes for SAH Evaluation ===
 	for (int axis = 0; axis < 3; axis++) {
-		// Sort objects along current axis
+		// Sort objects by centroid along the current axis
 		Comparator cmp{};
 		cmp.dimension = axis;
 		std::sort(objects.begin() + left_index, objects.begin() + right_index, cmp);
 
-		// Initialize buckets
+		// Define SAH buckets
 		struct Bucket {
 			int count = 0;
 			Vector min_bounds = Vector(FLT_MAX, FLT_MAX, FLT_MAX);
@@ -97,13 +99,13 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 		};
 		Bucket buckets[BUCKET_COUNT];
 
-		// Determine range and scale factor for bucketing
+		// Compute bucketing scale factor for centroids
 		float min_bound = box.min.getAxisValue(axis);
 		float max_bound = box.max.getAxisValue(axis);
 		float scale = (max_bound - min_bound) > 0.0f ?
 			BUCKET_COUNT / (max_bound - min_bound) : 0.0f;
 
-		// Place objects into buckets
+		// === 4. Place Objects into SAH Buckets ===
 		for (int i = left_index; i < right_index; i++) {
 			float centroid = objects[i]->getCentroid().getAxisValue(axis);
 			int bucket_idx = std::min(BUCKET_COUNT - 1,
@@ -124,15 +126,14 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 			);
 		}
 
-		// Evaluate all possible splits
+
+		// === 5. Evaluate All Possible Bucket Splits ===
 		for (int i = 1; i < BUCKET_COUNT; i++) {
-			Vector left_min(FLT_MAX, FLT_MAX, FLT_MAX);
-			Vector left_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-			Vector right_min(FLT_MAX, FLT_MAX, FLT_MAX);
-			Vector right_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			Vector left_min(FLT_MAX, FLT_MAX, FLT_MAX), left_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			Vector right_min(FLT_MAX, FLT_MAX, FLT_MAX), right_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 			int left_count = 0, right_count = 0;
 
-			// Compute left bucket properties
+			// Accumulate left split bounding box and count
 			for (int j = 0; j < i; j++) {
 				left_min = Vector(
 					std::min(left_min.x, buckets[j].min_bounds.x),
@@ -146,8 +147,7 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 				);
 				left_count += buckets[j].count;
 			}
-
-			// Compute right bucket properties
+			// Accumulate right split bounding box and count
 			for (int j = i; j < BUCKET_COUNT; j++) {
 				right_min = Vector(
 					std::min(right_min.x, buckets[j].min_bounds.x),
@@ -162,70 +162,66 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 				right_count += buckets[j].count;
 			}
 
-			// Calculate surface areas directly
+			// Compute surface areas
 			Vector left_extent = left_max - left_min;
 			float left_area = 2.0f * (left_extent.x * left_extent.y +
-				left_extent.x * left_extent.z +
-				left_extent.y * left_extent.z);
+				left_extent.x * left_extent.z + left_extent.y * left_extent.z);
 
 			Vector right_extent = right_max - right_min;
 			float right_area = 2.0f * (right_extent.x * right_extent.y +
-				right_extent.x * right_extent.z +
-				right_extent.y * right_extent.z);
+				right_extent.x * right_extent.z + right_extent.y * right_extent.z);
 
-			// Compute SAH cost
+			// Compute SAH cost of this split
 			float cost = TRAVERSAL_COST +
 				(left_count * left_area + right_count * right_area) *
 				INTERSECTION_COST / parent_surface_area;
 
+			// Update best split if cost is lower
 			if (cost < best_cost) {
 				best_cost = cost;
 				best_axis = axis;
-				best_split = left_index;
 
-				// Find the split index corresponding to this bucket
+				// Compute actual index for the split
 				int count = 0;
-				for (int j = 0; j < i; j++) {
-					count += buckets[j].count;
-				}
+				for (int j = 0; j < i; j++) count += buckets[j].count;
 				best_split = left_index + count;
 			}
 		}
 	}
 
-	// If no good split found, create leaf
+	//=== 6. Fallback: No Valid Split -> Make Leaf Node ===
 	if (best_split <= left_index || best_split >= right_index || best_cost >= n_objects * INTERSECTION_COST) {
 		node->makeLeaf(left_index, n_objects);
 		return;
 	}
 
-	// Sort along best axis
+	// === 7. Re-sort by Best Axis Before Splitting ===
 	Comparator cmp{};
 	cmp.dimension = best_axis;
 	std::sort(objects.begin() + left_index, objects.begin() + right_index, cmp);
 
+	// === 8. Create and Setup Child Nodes ===
 	BVHNode* left_node = new BVHNode();
 	BVHNode* right_node = new BVHNode();
 	int left_node_index = nodes.size();
-	node->makeNode(left_node_index);
+	node->makeNode(left_node_index);  // Store left child index
 
+	// Compute AABBs for left and right child nodes
 	AABB left_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
 	AABB right_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
 
-	for (int i = left_index; i < best_split; i++) {
-		left_bbox.extend(objects[i]->GetBoundingBox());  // Expand left AABB to fit objects
-	}
-	for (int i = best_split; i < right_index; i++) {
-		right_bbox.extend(objects[i]->GetBoundingBox()); // Expand right AABB to fit objects
-	}
+	for (int i = left_index; i < best_split; i++)
+		left_bbox.extend(objects[i]->GetBoundingBox());
+	for (int i = best_split; i < right_index; i++)
+		right_bbox.extend(objects[i]->GetBoundingBox());
 
-	left_node->setAABB(left_bbox);                     // Assign AABBs to new nodes
+	left_node->setAABB(left_bbox);
 	right_node->setAABB(right_bbox);
-
 
 	nodes.push_back(left_node);
 	nodes.push_back(right_node);
-
+	 
+	// === 9. Recursive Calls for Left and Right Nodes ===
 	build_recursive(left_index, best_split, left_node, depth + 1);
 	build_recursive(best_split, right_index, right_node, depth + 1);
 }
