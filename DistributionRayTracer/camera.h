@@ -88,7 +88,6 @@ public:
 		Vector ray_dir;
 		Vector eye_offset;
 
-		////PUT YOUR CODE HERE
 		eye_offset = eye + u * lens_sample.x+ v * lens_sample.y;
 
 		float px = ((pixel_sample.x / res_x) - 0.5f) * w * focal_ratio;
