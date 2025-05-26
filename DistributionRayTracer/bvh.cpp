@@ -259,6 +259,7 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 	Ray localRay = ray;
 	hitRec = rec;
 
+	//check if ray hits root
 	if (!currentNode->getAABB().hit(localRay, tmp))
 		return false;
 
@@ -301,13 +302,14 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 				}
 			}
 		}
-		else {
+		else { //leaf node - check for intersection with objects in it
 			int nObj = currentNode->getNObjs();
 			int objIndex = currentNode->getIndex();
 			Object* obj;
 			for (int i = 0; i < nObj; i++) {
 				obj = objects[objIndex + i];
 				rec = obj->hit(localRay);
+				// If this node's bounding box is closer than current hit, traverse it
 				if (rec.isHit && rec.t < hitRec.t) {
 					hitRec = rec;
 					*hit_obj = obj;
@@ -316,8 +318,8 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 			}
 		}
 
+		//
 		bool hasBetter = false;
-
 		while (!hit_stack.empty()) {
 			StackItem stack = hit_stack.top();
 			hit_stack.pop();
@@ -345,6 +347,7 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 	Ray localRay = ray;
 	BVHNode* currentNode = nodes[0];
 
+	//check if ray hits root
 	if (!currentNode->getAABB().hit(localRay, tmp))
 		return false;
 
@@ -387,18 +390,17 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 				if (rightHit) {
 					currentNode = rightNode;
 					continue;
-
 				}
 			}
 		}
-		else {
+		else { //leaf node - check for intersection with objects in it
 			int nObj = currentNode->getNObjs();
 			int objIndex = currentNode->getIndex();
 			Object* obj;
 			for (int i = 0; i < nObj; i++) {
 				obj = objects[objIndex + i];
 				rec = obj->hit(localRay);
-				if (rec.isHit)
+				if (rec.isHit && rec.t <= length + EPSILON)
 					return true;
 			}
 		}

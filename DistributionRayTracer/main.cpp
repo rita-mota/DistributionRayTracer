@@ -410,6 +410,9 @@ Color rayTracing(Ray ray, int depth, float ior_1, Vector lightSample)  //index o
 		if (Accel_Struct == GRID_ACC) {
 			shadowDir = Ls;
 		}
+		if (Accel_Struct == BVH_ACC) {
+			shadowDir = Ls;
+		}
 		else {
 			shadowDir = L;
 		}
