@@ -1,5 +1,5 @@
 #https://projet.liris.cnrs.fr/meshben/
-accel bvh
+accel grid
 spp 0
 bclr 0.5 0.5 0.5
 env skybox

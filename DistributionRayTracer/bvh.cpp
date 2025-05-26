@@ -60,17 +60,17 @@ void BVH::printNodes() {
 }
 
 void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int depth) {
-	const int LEAF_THRESHOLD = 2;
+	const int LEAF_THRESHOLD = 2; // Minimum number of objects per leaf
 	const int BUCKET_COUNT = 12; // Number of bins for SAH
 	const float TRAVERSAL_COST = 1.0f;
 	const float INTERSECTION_COST = 1.0f;
 
-	int n_objects = right_index - left_index;
+	int n_objects = right_index - left_index; // Number of objects in this node's range
 
 	// === BASE CASE: Create a leaf node if there are few enough objects ===
 	if (n_objects <= LEAF_THRESHOLD) {
-		node->makeLeaf(left_index, n_objects);         // Store start index and count in the leaf
-		return;                                        // Stop recursion
+		node->makeLeaf(left_index, n_objects);
+		return;
 	}
 
 	AABB box = node->getAABB();
@@ -183,8 +183,6 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 				best_axis = axis;
 				best_split = left_index;
 
-
-
 				// Find the split index corresponding to this bucket
 				int count = 0;
 				for (int j = 0; j < i; j++) {
@@ -208,49 +206,29 @@ void BVH::build_recursive(int left_index, int right_index, BVHNode* node, int de
 
 	BVHNode* left_node = new BVHNode();
 	BVHNode* right_node = new BVHNode();
-	int left_node_index = nodes.size();                // Index of left node in flat array
+	int left_node_index = nodes.size();
+	node->makeNode(left_node_index);
 
-	node->makeNode(left_node_index);                   // Store index of first child in current node
-
-	Vector left_min(FLT_MAX, FLT_MAX, FLT_MAX), left_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-	Vector right_min(FLT_MAX, FLT_MAX, FLT_MAX), right_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+	AABB left_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
+	AABB right_bbox(Vector(FLT_MAX, FLT_MAX, FLT_MAX), Vector(-FLT_MAX, -FLT_MAX, -FLT_MAX));
 
 	for (int i = left_index; i < best_split; i++) {
-		AABB obj_box = objects[i]->GetBoundingBox();
-		left_min = Vector(
-			std::min(left_min.x, obj_box.min.x),
-			std::min(left_min.y, obj_box.min.y),
-			std::min(left_min.z, obj_box.min.z)
-		);
-		left_max = Vector(
-			std::max(left_max.x, obj_box.max.x),
-			std::max(left_max.y, obj_box.max.y),
-			std::max(left_max.z, obj_box.max.z)
-		);
+		left_bbox.extend(objects[i]->GetBoundingBox());  // Expand left AABB to fit objects
 	}
 	for (int i = best_split; i < right_index; i++) {
-		AABB obj_box = objects[i]->GetBoundingBox();
-		right_min = Vector(
-			std::min(right_min.x, obj_box.min.x),
-			std::min(right_min.y, obj_box.min.y),
-			std::min(right_min.z, obj_box.min.z)
-		);
-		right_max = Vector(
-			std::max(right_max.x, obj_box.max.x),
-			std::max(right_max.y, obj_box.max.y),
-			std::max(right_max.z, obj_box.max.z)
-		);
+		right_bbox.extend(objects[i]->GetBoundingBox()); // Expand right AABB to fit objects
 	}
 
-	left_node->setAABB(AABB(left_min, left_max));
-	right_node->setAABB(AABB(right_min, right_max));
+	left_node->setAABB(left_bbox);                     // Assign AABBs to new nodes
+	right_node->setAABB(right_bbox);
+
+
 	nodes.push_back(left_node);
 	nodes.push_back(right_node);
 
 	build_recursive(left_index, best_split, left_node, depth + 1);
 	build_recursive(best_split, right_index, right_node, depth + 1);
 }
-
 
 
 
@@ -264,7 +242,6 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 	Ray localRay = ray;
 	hitRec = rec;
 
-	//check if ray hits root
 	if (!currentNode->getAABB().hit(localRay, tmp))
 		return false;
 
@@ -307,14 +284,13 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 				}
 			}
 		}
-		else { //leaf node - check for intersection with objects in it
+		else {
 			int nObj = currentNode->getNObjs();
 			int objIndex = currentNode->getIndex();
 			Object* obj;
 			for (int i = 0; i < nObj; i++) {
 				obj = objects[objIndex + i];
 				rec = obj->hit(localRay);
-				// If this node's bounding box is closer than current hit, traverse it
 				if (rec.isHit && rec.t < hitRec.t) {
 					hitRec = rec;
 					*hit_obj = obj;
@@ -323,8 +299,8 @@ bool BVH::Traverse(Ray& ray, Object** hit_obj, HitRecord& hitRec) {
 			}
 		}
 
-		//
 		bool hasBetter = false;
+
 		while (!hit_stack.empty()) {
 			StackItem stack = hit_stack.top();
 			hit_stack.pop();
@@ -352,7 +328,6 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 	Ray localRay = ray;
 	BVHNode* currentNode = nodes[0];
 
-	//check if ray hits root
 	if (!currentNode->getAABB().hit(localRay, tmp))
 		return false;
 
@@ -395,10 +370,11 @@ bool BVH::Traverse(Ray& ray) {  //shadow ray with length
 				if (rightHit) {
 					currentNode = rightNode;
 					continue;
+
 				}
 			}
 		}
-		else { //leaf node - check for intersection with objects in it
+		else {
 			int nObj = currentNode->getNObjs();
 			int objIndex = currentNode->getIndex();
 			Object* obj;
