@@ -251,6 +251,7 @@ vec3 rayColor(Ray r)
             {   
                 r = scatterRay;
                 throughput *= atten;
+
             }
             else
             {
@@ -265,7 +266,7 @@ vec3 rayColor(Ray r)
             break;
         }
     }
-    return col;
+    return pow(col, vec3(1.0/2.2)); // gamma correction
 }
 
 #define MAX_SAMPLES 10000.0
