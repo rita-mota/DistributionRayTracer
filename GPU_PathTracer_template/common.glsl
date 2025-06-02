@@ -140,9 +140,9 @@ Ray getRay(Camera cam, vec2 pixel_sample)  //rnd pixel_sample viewport coordinat
     //Calculate eye_offset and ray direction
 
     vec3 eye_offset = cam.eye + cam.u * ls.x + cam.v * ls.y;
-    vec3 ray_direction = ((cam.u * ((pixel_sample.x / iResolution.x + 0.5) * cam.width - cam.width * 0.5) +
+    vec3 ray_direction = normalize((cam.u * ((pixel_sample.x / iResolution.x + 0.5) * cam.width - cam.width * 0.5) +
                           cam.v * ((pixel_sample.y / iResolution.y + 0.5) * cam.height- cam.height * 0.5) -
-                          cam.n * cam.planeDist) * cam.focusDist).normalize();
+                          cam.n * cam.planeDist) * cam.focusDist);
     
     return createRay(eye_offset, normalize(ray_direction), time);
 }
@@ -211,13 +211,15 @@ struct HitRecord
 
 float schlick(float cosine, float refIdx)
 {
-    r0 = (1.0 - refIdx) / (1.0 + refIdx);
+    float r0 = (1.0 - refIdx) / (1.0 + refIdx);
     r0 = r0 * r0;
     return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
 }
 
 bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
 {
+    vec3 V = normalize(-rIn.d);
+    vec3 outwardNormal = rec.normal;
     if(rec.material.type == MT_DIFFUSE)
     {
         //INSERT CODE HERE
@@ -227,8 +229,9 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
     if(rec.material.type == MT_METAL)
     {
        //INSERT CODE HERE, consider fuzzy reflections
-        vec3 reflectDir = outwardNormal * (V * outwardNormal) * 2.0 - V;
-        vec3 reflectDir = (reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness).normalize();
+        float VdotN = dot(V, rec.normal);
+        vec3 reflectDir = outwardNormal * VdotN * 2.0 - V;
+        reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
         rScattered = createRay(rec.pos + rec.normal * epsilon, reflectDir);
         atten = rec.material.specColor;
         return true;
@@ -239,17 +242,16 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         vec3 outwardNormal;
         float niOverNt;
         float cosine;
-        vec3 V = normalize(-rIn.d);
 
         if(dot(rIn.d, rec.normal) > 0.0) //hit inside
         {
             outwardNormal = -rec.normal;
             niOverNt = rec.material.refIdx;
             //cosine = refraction cosine for schlick; 
-            cosine = outwardNormal * V;
+            cosine = dot(outwardNormal ,V);
             //atten = apply Beer's law by using rec.material.refractColor
-            color one = vec3(1.0);
-            atten = rec.material.refractColor * exp((one - rec.material.albedo) * - rec.t);
+            vec3 colorOne = vec3(1.0);
+            atten = rec.material.refractColor * exp((colorOne - rec.material.albedo) * - rec.t);
         }
         else  //hit from outside
         {
@@ -260,9 +262,11 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
 
         //Use probabilistic math to decide if scatter a reflected ray or a refracted ray
         float reflectProb;
-        vec3 Vt = outwardNormal * V * outwardNormal - V;
-        float sin_i = Vt.length();
+        vec3 Vt = dot(outwardNormal, V) * outwardNormal - V;
+        float sin_i = length(Vt);
         float sin_t = niOverNt * sin_i;
+        float cos_t = sqrt(1.0 - sin_t * sin_t);
+        
 
         if (sin_t < 1.0)
             reflectProb = schlick(cosine, rec.material.refIdx);  
@@ -270,19 +274,16 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
 
         if( hash1(gSeed) < reflectProb){ //Reflection
             // rScattered = calculate reflected ray
-            vec3 reflectDir = (outwardNormal * (V * outwardNormal) * 2.0 - V).normalize();
+            vec3 reflectDir = normalize(outwardNormal * (V * outwardNormal) * 2.0 - V);
             rScattered = createRay( rec.pos * outwardNormal * epsilon , reflectDir);
         }
         else { //Refraction
             // rScattered = calculate refracted ray
             //Vector r_t = (t * sin_t + (-N) * cos_t).normalize();
-            vec3 refractionDir = (Vt.normalize() * sin_t - outwardNormal * cos_t).normalize();
-            rScattered = ray(rec.pos * outwardNormal * epsilon, refractionDir);
+            vec3 refractionDir = normalize(normalize(Vt) * sin_t - outwardNormal * cos_t);
+            rScattered = createRay(rec.pos * outwardNormal * epsilon, refractionDir);
         }
-          
-        }
-
-        return true;
+        return true;  
     }
     return false;
 }
@@ -313,14 +314,14 @@ bool hit_triangle(Triangle t, Ray r, float tmin, float tmax, out HitRecord rec)
     float v = f * dot(r.d, q);
     if(v < 0.0 || u + v > 1.0) return false;
     //calculate t
-    float t = f * dot(e2, q);
+    float t_closest = f * dot(e2, q);
 
     vec3 normal = normalize(cross(e1, e2));
 
     //calculate a valid t and normal
-    if(t < tmax && t > tmin)
+    if(t_closest < tmax && t_closest > tmin)
     {
-        rec.t = t;
+        rec.t = t_closest;
         rec.normal = normal;
         rec.pos = pointOnRay(r, rec.t);
         return true;
@@ -396,6 +397,7 @@ bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
 {
     //INSERT YOUR CODE HERE
     //calculate a valid t and normal
+    bool hit = false;
     vec3 oc = r.o - s.center;
     float a = dot(r.d, r.d);
     float b = 2.0f *  dot(oc, r.d);
@@ -408,7 +410,8 @@ bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
     float sqrtD = sqrt(discriminant);
     float t1 = (-b - sqrtD) / (2.0f * a); //first root
     float t2 = (-b + sqrtD) / (2.0f * a); //second root
-
+    float t;
+    
     if(t1 > epsilon) {
         t = t1; //use the first root if it is positive
     } else if(t2 > epsilon) {
@@ -422,10 +425,10 @@ bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
     if(t < tmax && t > tmin) {
         rec.t = t;
         rec.pos = pointOnRay(r, rec.t);
-        rec.normal = normal
-        return true;
+        rec.normal = normal;
+        hit = true;
     }
-    else return false;
+        return hit;
 }
 
 bool hit_movingSphere(MovingSphere s, Ray r, float tmin, float tmax, out HitRecord rec)

@@ -206,20 +206,20 @@ vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
     vec3 lightDir = normalize(pl.pos - rec.pos);
 
     // 2. calculate the diffuse color contribution
-    diffCol = rec.material.diffuse * max(dot(rec.normal, lightDir), 0.0);
+    diffCol = rec.material.albedo * max(dot(rec.normal, lightDir), 0.0);
     
     // 3. calculate the specular color contribution
     vec3 viewDir = normalize(-r.d);
     vec3 reflectDir = reflect(-lightDir, rec.normal);
-    shininess = rec.material.shininess;
-    specCol = rec.material.specular * pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+    shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
+    specCol = rec.material.specColor * pow(max(dot(viewDir, reflectDir), 0.0), shininess);
 
-    // 4. calculate the distance to the light source and attenuation
-    float dist = length(pl.pos - rec.pos);
-    float attenuation = pl.intensity / (dist * dist);
+    // // 4. calculate the distance to the light source and attenuation
+    // float dist = length(pl.pos - rec.pos);
+    // float attenuation = pl.intensity / (dist * dist);
 
     // 5. combine contributions and apply attenuation
-    colorOut += (diffCol + specCol) * attenuation;
+    colorOut += (diffCol + specCol);
     
 	return colorOut; 
 }
