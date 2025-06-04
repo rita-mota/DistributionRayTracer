@@ -201,18 +201,21 @@ vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
     vec3 colorOut = vec3(0.0, 0.0, 0.0);
     float shininess;
     HitRecord dummy;
+    vec3 N = normalize(rec.normal);
 
     // 1. calculate the direction to the light source
     vec3 lightDir = normalize(pl.pos - rec.pos);
 
     // 2. calculate the diffuse color contribution
-    diffCol = rec.material.albedo * max(dot(rec.normal, lightDir), 0.0);
+    diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
     
     // 3. calculate the specular color contribution
     vec3 viewDir = normalize(-r.d);
-    vec3 reflectDir = reflect(-lightDir, rec.normal);
+    vec3 reflectDir = reflect(lightDir, N);
     shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
-    specCol = rec.material.specColor * pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+    specCol = rec.material.specColor * pow(max(dot(N, reflectDir), 0.0), shininess);
+
+    //specCol = rec.material.specColor;
 
     // // 4. calculate the distance to the light source and attenuation
     // float dist = length(pl.pos - rec.pos);
@@ -266,7 +269,7 @@ vec3 rayColor(Ray r)
             break;
         }
     }
-    return pow(col, vec3(1.0/2.2)); // gamma correction
+    return col; // gamma correction
 }
 
 #define MAX_SAMPLES 10000.0

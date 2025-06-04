@@ -211,9 +211,9 @@ struct HitRecord
 };
 
 
-float schlick(float cosine, float refIdx)
+float schlick(float cosine, float n1, float n2)
 {
-    float r0 = (1.0 - refIdx) / (1.0 + refIdx);
+    float r0 = (n1 - n2) / (n1 + n2);
     r0 = r0 * r0;
     return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
 }
@@ -221,51 +221,70 @@ float schlick(float cosine, float refIdx)
 bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
 {
     vec3 V = normalize(-rIn.d);
-    vec3 outwardNormal = rec.normal;
+    vec3 N = normalize(rec.normal);
+    float epsilon = 0.001; //small offset to avoid self-intersection
+
     if(rec.material.type == MT_DIFFUSE)
     {
+        vec3 lightDir = normalize(rIn.o - rec.pos);
         //INSERT CODE HERE
-        atten = rec.material.albedo * max(dot(rScattered.d, rec.normal), 0.0) / pi;
+        rScattered = createRay(rec.pos + N * epsilon, N + randomUnitVector(gSeed)); //create a scattered ray in a random direction
+        atten = rec.material.albedo * max(dot(N, lightDir), 0.0);
         return true;
     }
     if(rec.material.type == MT_METAL)
     {
        //INSERT CODE HERE, consider fuzzy reflections
-        //float VdotN = dot(V, rec.normal);
-        //vec3 reflectDir = outwardNormal * VdotN * 2.0 - V;
-        //reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
         
-        vec3 reflectDir = reflect(rIn.d, rec.normal); //calculate the reflected ray direction
-        rScattered = createRay(rec.pos + rec.normal * epsilon, reflectDir);
+        vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
+        reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
+        rScattered = createRay(rec.pos + N * epsilon, reflectDir);
         atten = rec.material.specColor;
         return true;
     }
     if(rec.material.type == MT_DIELECTRIC) // fuzzy reflections and refractions
     {
-        
-        Ray rScattered;
-        bool outside = dot(V, rec.normal) < 0.0; //check if the ray is outside or inside the object~
-        vec3 refractDir = refract(rIn.d, rec.normal, outside ? rec.material.refIdx : 1.0 / rec.material.refIdx);
+        bool outside = dot(rIn.d, N) < 0.0; //check if the ray is outside or inside the object
+        if(!outside) N = -N; //if inside, flip the normal 
+        float eta = 1.0 / rec.material.refIdx; //index of Refraction
+        if(!outside) eta = rec.material.refIdx; //if inside, use the inverse of the index of refraction
+
+        vec3 Vt = N * dot(N, V) - V; //calculate the tangent vector
+        float sin_i = length(Vt);
+        float sin_t = eta * sin_i; //calculate the sine of the angle of refraction
+        float sin_t2 = sin_t * sin_t; //sine squared of the angle of refractio
+        float cos_t = sqrt(1.0 - sin_t2); //calculate the cosine of the angle of refraction
+        float cos_i = dot(V, N); //calculate the cosine of the angle of incidence
+
+        vec3 refractDir = refract(normalize(rIn.d), normalize(rec.normal) , eta);
         float reflectProb;
-        if(refractDir == vec3(0.0)) { //total internal reflection
+
+        if(sin_t >= 1.0) { //total internal reflection
             reflectProb = 1.0; //reflect always
         }else {
             //calculate the reflect probability using Schlick's approximation
-            reflectProb = schlick(dot(V, rec.normal), rec.material.refIdx);
+            float costheta = outside? cos_i : cos_t; //cosine of the angle of incidence or refraction
+            //reflectProb = schlick(costheta, !outside? rec.material.refIdx : 1.0 / rec.material.refIdx, outside? 1.0 : rec.material.refIdx);
+            reflectProb = 0.0;
         }
         // Decide whether to reflect or refract
         if( hash1(gSeed) < reflectProb){ //Reflection
-            // rScattered = calculate reflected ray
-            rScattered = createRay(rec.pos + rec.normal * epsilon, reflect(rIn.d, rec.normal));
+            vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
+            reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
+            rScattered = createRay(rec.pos + N * epsilon, reflectDir);
+            atten = rec.material.specColor;
         }
         else { //Refraction
+            rScattered = createRay(rec.pos + N * epsilon, refractDir);
             if(!outside) {
                 vec3 one = vec3(1.0, 1.0, 1.0); //white color
-                atten = (one - rec.material.albedo * rec.t);
-            } else {
-                atten = vec3(1.0, 1.0, 1.0);
+                //atten =  exp(- rec.material.refractColor * rec.t); //absorption color for the refracted ray;
+                atten = rec.material.refractColor;
+            } 
+            else {
+                atten =   rec.material.albedo; //absorption color for the refracted ray
             }
-            rScattered = createRay(rec.pos + rec.normal * epsilon, refract(rIn.d, rec.normal, outside? rec.material.refIdx : 1.0 / rec.material.refIdx));
+            
         }
         return true;  
     }
