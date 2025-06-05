@@ -134,17 +134,17 @@ Camera createCamera(
 
 Ray getRay(Camera cam, vec2 pixel_sample)  //rnd pixel_sample viewport coordinates
 {
-    vec2 ls = cam.lensRadius * randomInUnitDisk(gSeed);  //ls - lens sample for DOF
+    vec2 ls = cam.lensRadius * randomInUnitDisk(gSeed) / 2.0;  //ls - lens sample for DOF
     float time = cam.time0 + hash1(gSeed) * (cam.time1 - cam.time0);
     
     //Calculate eye_offset and ray direction
 
     vec3 eye_offset = cam.eye + cam.u * ls.x + cam.v * ls.y;
-    float focal_ratio = cam.focusDist / cam.planeDist; 
-    float px = ((pixel_sample.x / iResolution.x) - 0.5) * cam.width * focal_ratio;
-    float py = ((pixel_sample.y / iResolution.y) - 0.5) * cam.height * focal_ratio;
+    float px = ((pixel_sample.x / iResolution.x) - 0.5) * cam.width * cam.focusDist;
+    float py = ((pixel_sample.y / iResolution.y) - 0.5) * cam.height * cam.focusDist;
 
-    vec3 ray_direction = normalize(cam.u * (px - ls.x) + cam.v * (py - ls.y) - cam.n * cam.focusDist);
+    vec3 ray_direction = cam.u * (px - ls.x) + cam.v * (py - ls.y) - cam.n * cam.focusDist * cam.planeDist;
+
     
     return createRay(eye_offset, normalize(ray_direction), time);
 }
@@ -222,7 +222,8 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
 {
     vec3 V = normalize(-rIn.d);
     vec3 N = normalize(rec.normal);
-    float epsilon = 0.001; //small offset to avoid self-intersection
+    bool outside = dot(rIn.d, N) < 0.0; //check if the ray is outside or inside the object
+    if(!outside) N = -N; //if inside, flip the normal 
 
     if(rec.material.type == MT_DIFFUSE)
     {
@@ -239,15 +240,20 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
         reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
         rScattered = createRay(rec.pos + N * epsilon, reflectDir);
-        atten = rec.material.specColor;
+        if(dot(reflectDir, N) > 0.0){
+            atten = rec.material.specColor;
+        } 
         return true;
     }
     if(rec.material.type == MT_DIELECTRIC) // fuzzy reflections and refractions
-    {
-        bool outside = dot(rIn.d, N) < 0.0; //check if the ray is outside or inside the object
-        if(!outside) N = -N; //if inside, flip the normal 
-        float eta = 1.0 / rec.material.refIdx; //index of Refraction
-        if(!outside) eta = rec.material.refIdx; //if inside, use the inverse of the index of refraction
+    {   
+        float ior1 = 1.0;
+        float ior2 = rec.material.refIdx;
+        if(!outside) { //if inside, use the inverse of the index of refraction
+            ior1 = rec.material.refIdx;
+            ior2 = 1.0;
+        }
+        float eta = ior1/ior2; //index of Refraction
 
         vec3 Vt = N * dot(N, V) - V; //calculate the tangent vector
         float sin_i = length(Vt);
@@ -256,34 +262,35 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         float cos_t = sqrt(1.0 - sin_t2); //calculate the cosine of the angle of refraction
         float cos_i = dot(V, N); //calculate the cosine of the angle of incidence
 
-        vec3 refractDir = refract(normalize(rIn.d), normalize(rec.normal) , eta);
         float reflectProb;
 
         if(sin_t >= 1.0) { //total internal reflection
             reflectProb = 1.0; //reflect always
         }else {
             //calculate the reflect probability using Schlick's approximation
-            float costheta = outside? cos_i : cos_t; //cosine of the angle of incidence or refraction
-            //reflectProb = schlick(costheta, !outside? rec.material.refIdx : 1.0 / rec.material.refIdx, outside? 1.0 : rec.material.refIdx);
-            reflectProb = 0.0;
+            float costheta;
+            if(ior1 > ior2) {
+                costheta = cos_t; //if outside, use the cosine of the angle of incidence
+            } else {
+                costheta = cos_i; //if inside, use the cosine of the angle of refraction
+            }
+            reflectProb = schlick(costheta, ior1, ior2); //calculate the reflect probability
         }
         // Decide whether to reflect or refract
         if( hash1(gSeed) < reflectProb){ //Reflection
             vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
             reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
-            atten = rec.material.specColor;
+            if (dot(reflectDir, N) > 0.0) atten =  vec3(1.0, 1.0, 1.0);;
         }
         else { //Refraction
-            rScattered = createRay(rec.pos + N * epsilon, refractDir);
+            vec3 refractDir = refract(normalize(rIn.d), N , eta);
+            refractDir = normalize(refractDir + randomInUnitSphere(gSeed) * rec.material.roughness);
+            rScattered = createRay(rec.pos - N * epsilon, refractDir);
             if(!outside) {
                 vec3 one = vec3(1.0, 1.0, 1.0); //white color
-                //atten =  exp(- rec.material.refractColor * rec.t); //absorption color for the refracted ray;
-                atten = rec.material.refractColor;
+                atten =   exp( -rec.material.refractColor * rec.t); //absorption color for the refracted ray;
             } 
-            else {
-                atten =   rec.material.albedo; //absorption color for the refracted ray
-            }
             
         }
         return true;  
@@ -408,7 +415,7 @@ bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
 
     float discriminant = b * b - 4.0f * a * c;
     
-    if(discriminant < 0.0) return false; //no intersection
+    if(discriminant < 0.0) return hit; //no intersection
 
     float sqrtD = sqrt(discriminant);
     float t1 = (-b - sqrtD) / (2.0f * a); //first root
@@ -420,10 +427,10 @@ bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
     } else if(t2 > epsilon) {
         t = t2; //use the second root if the first is negative
     } else {
-        return false; //both roots are negative, no intersection
+        return hit; //both roots are negative, no intersection
     }
      
-    vec3 normal = normalize((pointOnRay(r, t) - s.center)); //calculate the normal at the intersection point
+    vec3 normal = normalize(pointOnRay(r, t) - s.center); //calculate the normal at the intersection point
 	
     if(t < tmax && t > tmin) {
         rec.t = t;
@@ -431,12 +438,12 @@ bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
         rec.normal = normal;
         hit = true;
     }
-        return hit;
+    return hit;
 }
 
 bool hit_movingSphere(MovingSphere s, Ray r, float tmin, float tmax, out HitRecord rec)
 {
-    float B, C, delta;
+    bool hit = false;
     bool outside;
     float t;
 
@@ -452,25 +459,22 @@ bool hit_movingSphere(MovingSphere s, Ray r, float tmin, float tmax, out HitReco
     float b = 2.0 * (dot(oc, d) - dot(oc, d1) * dot(d, d1));
     float c = dot(oc, oc) - dot(oc, d1) * dot(oc, d1) - s.radius * s.radius; 
 
-    //calculate the discriminant  
-    B = b / (2.0 * a);
-    C = c - B * B;      
-    delta = B * B - C;
+    float discriminant = b * b - 4.0 * a * c;
 
-    if(delta < 0.0) return false; //no intersection
+    if(discriminant < 0.0) return hit; //no intersection
+    
+    float sqrtD = sqrt(discriminant);
+    float t1 = (-b - sqrtD) / (2.0f * a); //first root
+    float t2 = (-b + sqrtD) / (2.0f * a); //second root
 
-    float sqrtD = sqrt(delta);
-    
-    
-    //calculate a valid t
-    if(B - sqrtD > epsilon) {
-        t = B - sqrtD; //use the first root if it is positive
-        outside = true;
-    } else if(B + sqrtD > epsilon) {
-        t = B + sqrtD; //use the second root if the first is negative
-        outside = false;
+    if(t1 > epsilon) {
+        t = t1; //use the first root if it is positive
+        outside = true; //the ray is outside the sphere
+    } else if(t2 > epsilon) {
+        t = t2; //use the second root if the first is negative
+        outside = false; //the ray is inside the sphere
     } else {
-        return false; //both roots are negative, no intersection
+        return hit; //both roots are negative, no intersection
     }
 
     //calculate the normal at the intersection point
@@ -488,9 +492,9 @@ bool hit_movingSphere(MovingSphere s, Ray r, float tmin, float tmax, out HitReco
         rec.t = t;
         rec.pos = pointOnRay(r, rec.t);
         rec.normal = normal;
-        return true;
+        hit = true;
     }
-    else return false;
+    return hit;
 }
 
 struct pointLight {

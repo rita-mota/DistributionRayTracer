@@ -7,7 +7,7 @@
 #include "./common.glsl"
 #iChannel0 "self"
  
-#define SCENE 0
+#define SCENE 1
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -210,18 +210,12 @@ vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
     diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
     
     // 3. calculate the specular color contribution
-    vec3 viewDir = normalize(-r.d);
-    vec3 reflectDir = reflect(lightDir, N);
+    vec3 viewDir = normalize(r.d);
+    vec3 H = normalize(lightDir + viewDir); // half vector
     shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
-    specCol = rec.material.specColor * pow(max(dot(N, reflectDir), 0.0), shininess);
+    specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-    //specCol = rec.material.specColor;
-
-    // // 4. calculate the distance to the light source and attenuation
-    // float dist = length(pl.pos - rec.pos);
-    // float attenuation = pl.intensity / (dist * dist);
-
-    // 5. combine contributions and apply attenuation
+    // 4. combine contributions and apply attenuation
     colorOut += (diffCol + specCol);
     
 	return colorOut; 
@@ -238,18 +232,20 @@ vec3 rayColor(Ray r)
     {
         if(hit_world(r, 0.001, 10000.0, rec))
         {
-            //calculate direct lighting with 3 white point lights:
-            //{
-                //createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0))
-                //createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0))
-                //createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0))
 
-            col += directlighting(createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0)), r, rec) * throughput;
-            //}
-           
+            pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
+            pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
+            pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
+
+            col += directlighting(l1, r, rec) * throughput;
+            col += directlighting(l2, r, rec) * throughput;
+            col += directlighting(l3, r, rec) * throughput;
+
             //calculate secondary ray and update throughput
+
             Ray scatterRay;
-            vec3 atten;
+            vec3 atten = vec3(1.0f, 1.0f, 1.0f);
+
             if(scatter(r, rec, atten, scatterRay))
             {   
                 r = scatterRay;
@@ -269,7 +265,7 @@ vec3 rayColor(Ray r)
             break;
         }
     }
-    return col; // gamma correction
+    return col; 
 }
 
 #define MAX_SAMPLES 10000.0
