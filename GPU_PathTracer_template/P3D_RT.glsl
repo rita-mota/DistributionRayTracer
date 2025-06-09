@@ -7,7 +7,7 @@
 #include "./common.glsl"
 #iChannel0 "self"
  
-#define SCENE 1
+#define SCENE 0
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -32,7 +32,9 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
         if(hit_sphere(createSphere(vec3(4.0, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
         {
             hit = true;
-            rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
+            //rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
+            rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.2);
+            //rec.material = createPlasticMaterial(vec3(0.0, 0.5, 1.0), 0.0);
         }
 
         if(hit_sphere(createSphere(vec3(-1.5, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
@@ -186,6 +188,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
                 hit = true;
                 float r = float(sphereIndex) / float(c_numSpheres-1) * 0.1f;
                 rec.material = createDielectricMaterial(vec3(0.0, 0.5, 1.0), 1.1, r);
+                //rec.material = createPlasticMaterial(vec3(0.0, 0.5, 1.0), r);
             }
         }
 
@@ -206,17 +209,23 @@ vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
     // 1. calculate the direction to the light source
     vec3 lightDir = normalize(pl.pos - rec.pos);
 
-    // 2. calculate the diffuse color contribution
-    diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
-    
-    // 3. calculate the specular color contribution
-    vec3 viewDir = normalize(r.d);
-    vec3 H = normalize(lightDir + viewDir); // half vector
-    shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
-    specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
+    if (dot(N, lightDir) > 0.0){
+        // 2. calculate the diffuse color contribution
+        diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
+        
+        // 3. calculate the specular color contribution
+        vec3 viewDir = normalize(r.d);
+        vec3 H = normalize(lightDir - viewDir); // half vector
+        shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
+        specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-    // 4. combine contributions and apply attenuation
-    colorOut += (diffCol + specCol);
+        vec3 F0 = rec.material.specColor;
+        if(rec.material.type == MT_METAL)
+            specCol =  BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
+
+        // 4. combine contributions and apply attenuation
+        colorOut += (diffCol + specCol);
+    }
     
 	return colorOut; 
 }
@@ -277,7 +286,12 @@ void main()
     vec2 mouse = iMouse.xy / iResolution.xy;
     mouse.x = mouse.x * 2.0 - 1.0;
 
-    vec3 camPos = vec3(mouse.x * 10.0, mouse.y * 5.0, 8.0);
+    vec3 camPos;
+    if (SCENE == 0)
+        camPos = vec3(mouse.x * 10.0, mouse.y * 5.0, 8.0);
+    else
+        camPos = vec3(mouse.x * 10.0, mouse.y * 5.0, 50.0);
+
     vec3 camTarget = vec3(0.0, 0.0, -1.0);
     float fovy = 60.0;
     float aperture = 0.0;

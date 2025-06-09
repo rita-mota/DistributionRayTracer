@@ -153,6 +153,7 @@ Ray getRay(Camera cam, vec2 pixel_sample)  //rnd pixel_sample viewport coordinat
 #define MT_DIFFUSE 0
 #define MT_METAL 1
 #define MT_DIELECTRIC 2
+#define MT_PLASTIC 3
 
 struct Material
 {
@@ -202,6 +203,17 @@ Material createDielectricMaterial(vec3 refractClr, float refIdx, float roughness
     return m;
 }
 
+Material createPlasticMaterial(vec3 albedo, float roughness)
+{
+    Material m;
+    m.type = MT_PLASTIC;
+    m.albedo = albedo;
+    m.specColor = vec3(0.04);
+    m.roughness = roughness;
+    m.emissive = vec3(0.0);
+    return m;
+}
+
 struct HitRecord
 {
     vec3 pos;
@@ -216,6 +228,53 @@ float schlick(float cosine, float n1, float n2)
     float r0 = (n1 - n2) / (n1 + n2);
     r0 = r0 * r0;
     return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float D_GGX(float NoH, float roughness)
+{
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+    float NoH2 = NoH * NoH;
+    float b = (NoH2 * (alpha2 -1.0) + 1.0);
+    return alpha2 / (pi * b * b + epsilon);
+}
+
+float G1_GGX_Schlick(float NoV, float roughness)
+{
+    //float r = roughness; // original
+    float r = 0.5 * 0.5 * roughness; //Disney remapping
+    float k = (r * r) / 2.0;
+    float denom = NoV * (1.0 - k) + k;
+    return max(NoV, 0.0) / (denom + epsilon);
+}
+
+float G_Smith(float NoV, float NoL, float roughness)
+{
+    float g1_l = G1_GGX_Schlick(NoL, roughness);
+    float g1_v = G1_GGX_Schlick(NoV, roughness);
+    return g1_l * g1_v;
+}
+
+vec3 BRDF_GGX(vec3 N, vec3 V, vec3 L, vec3 F0, float roughness) {
+    vec3 H = normalize(L + V);
+    float NoV = max(dot(N, V), 0.0);
+    float NoL = max(dot(N, L), 0.0);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+
+    float D = D_GGX(NoH, roughness);
+    float G = G_Smith(NoV, NoL, roughness);
+    vec3 F = fresnelSchlick(VoH, F0);
+
+    vec3 numerator = D * G * F;
+    float denominator = 4.0 * NoV * NoL;
+
+    return numerator / (denominator + epsilon);
 }
 
 bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
@@ -235,15 +294,39 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
     }
     if(rec.material.type == MT_METAL)
     {
-       //INSERT CODE HERE, consider fuzzy reflections
-        
+        vec3 lightDir = normalize(rIn.o - rec.pos);
         vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
         reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
         rScattered = createRay(rec.pos + N * epsilon, reflectDir);
         if(dot(reflectDir, N) > 0.0){
+            if (rec.material.roughness > epsilon) {
+                vec3 F0 = rec.material.specColor;
+                float roughness = rec.material.roughness;
+                atten = BRDF_GGX(N, V, lightDir, F0, roughness);
+            } else {
+                atten = rec.material.specColor; //fuzzy reflection
+            }
             atten = rec.material.specColor;
         } 
         return true;
+
+
+        // if (roughness < epsilon){
+        //     reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);       
+        //     if(dot(reflectDir, N) > 0.0){
+        //         atten = rec.material.specColor * max(dot(N, rScattered.d), 0.0);
+        //     } 
+        // } else {
+        //     vec3 lightDir = normalize(rIn.o - rec.pos);
+        //     vec3 F0 = rec.material.specColor;
+        //     vec3 H = normalize(lightDir + V);
+        //     float NdotL = max(dot(N, lightDir), 0.0);
+        //     //reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);  
+        //     if(dot(reflectDir, N) > 0.0){
+        //         //atten = BRDF_GGX(N, V, lightDir, F0, roughness) * max(dot(N, rScattered.d), 0.0); //calculate the BRDF for the metal material
+        //     } 
+        // }
+        //reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);       
     }
     if(rec.material.type == MT_DIELECTRIC) // fuzzy reflections and refractions
     {   
@@ -295,6 +378,19 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         }
         return true;  
     }
+    // if (rec.material.type == MT_PLASTIC){
+    //     float roughness = rec.material.roughness;
+    //     vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
+    //     rScattered = createRay(rec.pos + N * epsilon, reflectDir);
+    //     vec3 lightDir = normalize(rIn.o - rec.pos);
+    //     vec3 F0 = rec.material.specColor;
+    //     vec3 H = normalize(lightDir + V);
+    //     float NdotL = max(dot(N, lightDir), 0.0);
+    //     reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);  
+    //     if(dot(reflectDir, N) > 0.0){
+    //         atten = rec.material.albedo/pi + BRDF_GGX(N, V, lightDir, F0, roughness) * max(dot(N, rScattered.d), 0.0); //calculate the BRDF for the metal material
+    //     } 
+    // }
     return false;
 }
 
