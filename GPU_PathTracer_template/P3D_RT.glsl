@@ -7,7 +7,7 @@
 #include "./common.glsl"
 #iChannel0 "self"
  
-#define SCENE 0
+#define SCENE 1
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -15,7 +15,6 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
     rec.t = tmax;
 
     #if SCENE == 0       //Shirley Weekend scene
-    
 
         if(hit_quad(createQuad(vec3(-10.0, -0.05, 10.0), vec3(10.0, -0.05, 10.0), vec3(10.0, -0.05, -10.0), vec3(-10.0, -0.05, -10.0)), r, tmin, rec.t, rec))
         {
@@ -197,80 +196,32 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
     return hit;
 }
 
-vec3 directlighting(pointLight pl, Ray r, HitRecord rec) {
-    vec3 colorOut = vec3(0.0);
+vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
+    vec3 diffCol, specCol;
+    vec3 colorOut = vec3(0.0, 0.0, 0.0);
+    float shininess;
+    HitRecord dummy;
     vec3 N = normalize(rec.normal);
     
     
 
-    // Direction and distance to light
-    vec3 lightDir = pl.pos - rec.pos;
-    float distToLight = length(lightDir);
-    lightDir = normalize(lightDir);
+    // 1. calculate the direction to the light source
+    vec3 lightDir = normalize(pl.pos - rec.pos);
 
-    // HARD SHADOWS: Cast a ray to the light
-    Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
-    HitRecord shadowHit;
-    if (hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
-        return vec3(0.0); // In shadow: no light contribution
-    }
+    // 2. calculate the diffuse color contribution
+    diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
+    
+    // 3. calculate the specular color contribution
+    vec3 viewDir = normalize(r.d);
+    vec3 H = normalize(lightDir + viewDir); // half vector
+    shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
+    specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-    // Diffuse
-    vec3 diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
-
-    // Specular
-    vec3 viewDir = normalize(-r.d);
-    vec3 H = normalize(lightDir + viewDir);
-    float shininess = 8.0 / (pow(rec.material.roughness, 4.0) + epsilon) - 2.0;
-    vec3 specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
-
-    // Combine
-    colorOut = diffCol + specCol;
-
-    return colorOut;
+    // 4. combine contributions and apply attenuation
+    colorOut += (diffCol + specCol);
+    
+	return colorOut; 
 }
-
-vec3 directlighting_quad(quadLight ql, Ray r, HitRecord rec) {
-    int SAMPLES = ql.spp;
-    vec3 colorOut = vec3(0.0);
-    vec3 N = normalize(rec.normal);
-
-    // Correctly interpret quad light geometry
-    vec3 A = ql.pos;
-    vec3 AB = ql.u;
-    vec3 AD = ql.v;
-
-    for (int i = 0; i < SAMPLES; ++i) {
-        float tempSeed = float(i) + dot(gl_FragCoord.xy, vec2(17.0, 59.0)) + iTime * 83.0;
-        vec2 randUV = clamp(hash2(tempSeed), 0.001, 0.999);
-        vec3 lightSample = A + randUV.x * AB + randUV.y * AD;
-
-        vec3 lightDir = lightSample - rec.pos;
-        float distToLight = length(lightDir);
-        if (distToLight < 0.001) continue;
-        lightDir = normalize(lightDir);
-
-        // Shadow ray to this light sample
-        Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
-        HitRecord shadowHit;
-
-        if (!hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
-            // No blocker: accumulate contribution
-            float diff = max(dot(N, lightDir), 0.0);
-            vec3 diffCol = rec.material.albedo * diff;
-
-            vec3 viewDir = normalize(-r.d);
-            vec3 H = normalize(lightDir + viewDir);
-            float shininess = 8.0 / (pow(rec.material.roughness, 4.0) + epsilon) - 2.0;
-            vec3 specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
-
-            colorOut += (diffCol + specCol) * ql.color * ql.intensity;
-        }
-    }
-
-    return colorOut / float(SAMPLES);
-}
-
 
 #define MAX_BOUNCES 10
 
@@ -288,19 +239,9 @@ vec3 rayColor(Ray r)
             pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
             pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
 
-            quadLight ql1 = createQuadLight(
-                vec3(-10.0, 15.0, 0.0),              // position of one corner
-                vec3(8.0, 15.0, 3.0),              // width along X
-                vec3(1.0, 15.0, -9.0),             // height along -Z (still okay)
-                2.0,                               // brighter intensity
-                vec3(1.0),                         // white light
-                16                                 // spp
-            );
-
             col += directlighting(l1, r, rec) * throughput;
             col += directlighting(l2, r, rec) * throughput;
             col += directlighting(l3, r, rec) * throughput;
-            col += directlighting_quad(ql1, r, rec) * throughput;
 
             //calculate secondary ray and update throughput
 
@@ -430,4 +371,3 @@ void main()
     color = mix(prevLinear, color, 1.0/w);
     gl_FragColor = vec4(toGamma(color), w);
 }
-

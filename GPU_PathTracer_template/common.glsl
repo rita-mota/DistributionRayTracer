@@ -502,29 +502,6 @@ struct pointLight {
     vec3 color;
 };
 
-struct quadLight {
-    vec3 pos;
-    vec3 u, v; //two vectors defining the quad
-    float width, height; //dimensions of the quad
-    float intensity; //intensity of the light
-    vec3 color;
-    int spp;
-};
-
-quadLight createQuadLight(vec3 pos, vec3 u, vec3 v, float intensity, vec3 color, int spp) {
-    quadLight l;
-    l.pos = pos;
-    l.u = u;
-    l.v = v;
-    l.width = length(u);
-    l.height = length(v);
-    l.intensity = intensity;
-    l.color = color;
-    l.spp = spp;
-    return l;
-}
-
-
 pointLight createPointLight(vec3 pos, vec3 color) 
 {
     pointLight l;
