@@ -205,6 +205,8 @@ vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
     float shininess;
     HitRecord dummy;
     vec3 N = normalize(rec.normal);
+    
+    
 
     // 1. calculate the direction to the light source
     vec3 lightDir = normalize(pl.pos - rec.pos);
@@ -277,22 +279,67 @@ vec3 rayColor(Ray r)
     return col; 
 }
 
+// Constants for controlling zoom and camera range
+const float zoomSpeed = 0.2f; // Adjust the zoom speed (how fast the zoom happens)
+const float minZoom = 5.0f; // Minimum camera distance
+const float maxZoom = 50.0f; // Maximum camera distance
+
+// Mouse camera control parameters
+const float c_minCameraAngle = 0.01f;
+const float c_maxCameraAngle = (pi - 0.01f);
+const vec3 c_cameraAt = vec3(0.0f, 0.0f, 20.0f);
+
+
+void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp, out vec3 cameraRight)
+{
+    // Get mouse scroll input to simulate zoom (iMouse.z controls zooming)
+    float scroll = iMouse.z; // Positive for zooming in, negative for zooming out
+
+    // Dynamic camera distance adjustment based on scroll input
+    float cameraDistance = 20.0f; // Default camera distance
+    cameraDistance = clamp(cameraDistance - scroll * zoomSpeed, minZoom, maxZoom); // Clamp to ensure it stays within the set range
+    // if the mouse is at (0,0) it hasn't been moved yet, so use a default camera setup
+    vec2 mouse = iMouse.xy;
+    if (dot(mouse, vec2(1.0f, 1.0f)) == 0.0f)
+    {
+        cameraPos = vec3(0.0f, 0.0f, -cameraDistance); // Use adjusted cameraDistance for zoom
+        cameraFwd = vec3(0.0f, 0.0f, 1.0f);
+        cameraUp = vec3(0.0f, 1.0f, 0.0f);
+        cameraRight = vec3(1.0f, 0.0f, 0.0f);
+        return;
+    }
+     
+    // Calculate the camera position using mouse movement (orbiting)
+    float angleX = -mouse.x * 16.0f / float(iResolution.x);
+    float angleY = mix(c_minCameraAngle, c_maxCameraAngle, mouse.y / float(iResolution.y));
+     
+    cameraPos.x = sin(angleX) * sin(angleY) * cameraDistance;  // Use adjusted cameraDistance for zoom
+    cameraPos.y = -cos(angleY) * cameraDistance;
+    cameraPos.z = cos(angleX) * sin(angleY) * cameraDistance;
+     
+    cameraPos += c_cameraAt; // Offset by target position
+    
+    // Calculate forward, right, and up vectors
+    cameraFwd = normalize(c_cameraAt - cameraPos);
+    cameraRight = normalize(cross(vec3(0.0f, 1.0f, 0.0f), cameraFwd));
+    cameraUp = normalize(cross(cameraFwd, cameraRight));   
+}
+
+
 #define MAX_SAMPLES 10000.0
 
 void main()
 {
     gSeed = float(baseHash(floatBitsToUint(gl_FragCoord.xy))) / float(0xffffffffU) + iTime;
 
-    vec2 mouse = iMouse.xy / iResolution.xy;
-    mouse.x = mouse.x * 2.0 - 1.0;
+        // calculate subpixel camera jitter for anti aliasing
+ 
+    // get the camera vectors
+    vec3 cameraPos, cameraFwd, cameraUp, cameraRight;
+    GetCameraVectors(cameraPos, cameraFwd, cameraUp, cameraRight);    
 
-    vec3 camPos;
-    if (SCENE == 0)
-        camPos = vec3(mouse.x * 10.0, mouse.y * 5.0, 8.0);
-    else
-        camPos = vec3(mouse.x * 10.0, mouse.y * 5.0, 50.0);
-
-    vec3 camTarget = vec3(0.0, 0.0, -1.0);
+    vec3 camPos = cameraPos; // small jitter for anti-aliasing
+    vec3 camTarget = cameraPos + cameraFwd;
     float fovy = 60.0;
     float aperture = 0.0;
     float distToFocus = 1.0;
@@ -301,7 +348,7 @@ void main()
     Camera cam = createCamera(
         camPos,
         camTarget,
-        vec3(0.0, 1.0, 0.0),    // world up vector
+        cameraUp,
         fovy,
         iResolution.x / iResolution.y,
         aperture,
