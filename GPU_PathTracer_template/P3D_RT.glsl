@@ -6,8 +6,11 @@
 
 #include "./common.glsl"
 #iChannel0 "self"
+#iChannel1 "file://cubemaps/yokohama_{}.jpg" // Use a single wildcard for CubeMap
+#iChannel1::Type "CubeMap"
+#iKeyboard
  
-#define SCENE 2
+#define SCENE 0
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -263,46 +266,176 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
             }
         }
     #elif SCENE == 3
+
+       	// back wall
+        {
+            vec3 A = vec3(-12.6f, -12.6f, 25.0f);
+            vec3 B = vec3( 12.6f, -12.6f, 25.0f);
+            vec3 C = vec3( 12.6f,  12.6f, 25.0f);
+            vec3 D = vec3(-12.6f,  12.6f, 25.0f);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.7f, 0.7f));
+            }
+        }    
+        
+        // floor
+        {
+            vec3 A = vec3(-12.6f, -12.45f, 25.0f);
+            vec3 B = vec3( 12.6f, -12.45f, 25.0f);
+            vec3 C = vec3( 12.6f, -12.45f, 15.0f);
+            vec3 D = vec3(-12.6f, -12.45f, 15.0f);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.7f, 0.7f));
+            }
+        }
+        // ceiling
+        {
+            vec3 A = vec3(-12.6f, 12.5f, 25.0f);
+            vec3 B = vec3( 12.6f, 12.5f, 25.0f);
+            vec3 C = vec3( 12.6f, 12.5f, 15.0f);
+            vec3 D = vec3(-12.6f, 12.5f, 15.0f);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.7f, 0.7f));
+            }       
+        }    
+        
+        // left wall
+        {
+            vec3 A = vec3(-12.5f, -12.6f, 25.0f);
+            vec3 B = vec3(-12.5f, -12.6f, 15.0f);
+            vec3 C = vec3(-12.5f,  12.6f, 15.0f);
+            vec3 D = vec3(-12.5f,  12.6f, 25.0f);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.1f, 0.1f));
+            }      
+        }
+        
+        // right wall 
+        {
+            vec3 A = vec3( 12.5f, -12.6f, 25.0f);
+            vec3 B = vec3( 12.5f, -12.6f, 15.0f);
+            vec3 C = vec3( 12.5f,  12.6f, 15.0f);
+            vec3 D = vec3( 12.5f,  12.6f, 25.0f);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.1f, 0.7f, 0.1f));
+            }      
+        }    
+        
+        // light
+        {
+            vec3 A = vec3(-5.0f, 12.4f,  22.5f);
+            vec3 B = vec3( 5.0f, 12.4f,  22.5f);
+            vec3 C = vec3( 5.0f, 12.4f,  17.5f);
+            vec3 D = vec3(-5.0f, 12.4f,  17.5f);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.0));
+                rec.material.emissive = vec3(1.0f, 0.9f, 0.7f) * 20.0f;
+            }
+    
+        }
+        if(hit_sphere(createSphere(vec3(-9.0f, -9.5f, 20.0f), 3.0f),r,tmin,rec.t,rec))
+        {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.9f, 0.9f, 0.75f));
+        }
+
+        if(hit_sphere(createSphere(vec3(0.0f, -9.5f, 20.0f), 3.0f),r,tmin,rec.t,rec))
+        {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.9f, 0.75f, 0.9f));
+        }
+
+        if(hit_sphere(createSphere(vec3(9.0f, -9.5f, 20.0f), 3.0f),r,tmin,rec.t,rec))
+        {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.75f, 0.9f, 0.9f));
+        }
+   
+        
     #endif
 
     return hit;
 }
 
-vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
-    vec3 diffCol, specCol;
-    vec3 colorOut = vec3(0.0, 0.0, 0.0);
-    float shininess;
-    HitRecord dummy;
+
+vec3 directlighting(pointLight pl, Ray r, HitRecord rec) {
+    vec3 colorOut = vec3(0.0);
     vec3 N = normalize(rec.normal);
-    
-    // 1. calculate the direction to the light source
-    vec3 lightDir = normalize(pl.pos - rec.pos);
 
-    if (dot(N, lightDir) > 0.0){
-        // 2. calculate the diffuse color contribution
-        diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
-        
-        // 3. calculate the specular color contribution
-        vec3 viewDir = normalize(r.d);
-        vec3 H = normalize(lightDir - viewDir); // half vector
-        shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
-        specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
+    // Direction and distance to light
+    vec3 lightDir = pl.pos - rec.pos;
+    float distToLight = length(lightDir);
+    lightDir = normalize(lightDir);
 
-        vec3 F0 = rec.material.specColor;
-
-        vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
-        vec3 kd = vec3(1.0) - ks;
-
-        if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
-            specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
-        if (rec.material.type == MT_PLASTIC)
-            diffCol = kd * rec.material.albedo / pi;
-        // 4. combine contributions and apply attenuation
-        colorOut += (diffCol + specCol) * pl.color * max(dot(N, lightDir), 0.0);
+    // HARD SHADOWS: Cast a ray to the light
+    Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
+    HitRecord shadowHit;
+    if (hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
+        return vec3(0.0); // In shadow: no light contribution
     }
-    
-	return colorOut; 
+
+    // Diffuse
+    vec3 diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
+
+    // Specular
+    vec3 viewDir = normalize(-r.d);
+    vec3 H = normalize(lightDir + viewDir);
+    float shininess = 8.0 / (pow(rec.material.roughness, 4.0) + epsilon) - 2.0;
+    vec3 specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
+
+    // Combine
+    colorOut = diffCol + specCol;
+
+    return colorOut;
 }
+
+// vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
+//     vec3 diffCol, specCol;
+//     vec3 colorOut = vec3(0.0, 0.0, 0.0);
+//     float shininess;
+//     HitRecord dummy;
+//     vec3 N = normalize(rec.normal);
+    
+//     // 1. calculate the direction to the light source
+//     vec3 lightDir = normalize(pl.pos - rec.pos);
+
+//     if (dot(N, lightDir) > 0.0){
+//         // 2. calculate the diffuse color contribution
+//         diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
+        
+//         // 3. calculate the specular color contribution
+//         vec3 viewDir = normalize(r.d);
+//         vec3 H = normalize(lightDir - viewDir); // half vector
+//         shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
+//         specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
+
+//         vec3 F0 = rec.material.specColor;
+
+//         vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
+//         vec3 kd = vec3(1.0) - ks;
+
+//         if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
+//             specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
+//         if (rec.material.type == MT_PLASTIC)
+//             diffCol = kd * rec.material.albedo / pi;
+//         // 4. combine contributions and apply attenuation
+//         colorOut += (diffCol + specCol) * pl.color * max(dot(N, lightDir), 0.0);
+//     }
+    
+// 	return colorOut; 
+// }
 
 #define MAX_BOUNCES 10
 
@@ -321,14 +454,26 @@ vec3 rayColor(Ray r)
                 // if the material is emissive, add its color to the output
                 col +=  rec.material.emissive * throughput;
             }
+            if(SCENE == 0){
+                pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
+                pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
+                pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
 
-            pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
-            pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
-            pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
+                col += directlighting(l1, r, rec) * throughput;
+                col += directlighting(l2, r, rec) * throughput;
+                col += directlighting(l3, r, rec) * throughput;
+            }
 
-            col += directlighting(l1, r, rec) * throughput;
-            col += directlighting(l2, r, rec) * throughput;
-            col += directlighting(l3, r, rec) * throughput;
+            if(SCENE == 3){
+                pointLight l1 = createPointLight(vec3(-10.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
+                pointLight l2 = createPointLight(vec3(10.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
+                pointLight l3 = createPointLight(vec3(0.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
+
+                col += directlighting(l1, r, rec) * throughput;
+                col += directlighting(l2, r, rec) * throughput;
+                col += directlighting(l3, r, rec) * throughput;
+            }
+            
 
             //calculate secondary ray and update throughput
 
@@ -346,11 +491,28 @@ vec3 rayColor(Ray r)
                 col += throughput * rec.material.emissive;
                 break; // no more scattering, exit loop
             }
+
+            // Russian Roulette
+            // As the throughput gets smaller, the ray is more likely to get terminated early.
+            // Survivors have their value boosted to make up for fewer samples being in the average.
+            
+            float p = max(throughput.r, max(throughput.g, throughput.b));
+            if (hash1(gSeed) > p)
+                break;
+
+            // Add the energy we 'lose' by randomly terminating paths
+            throughput *= 1.0f / p;            
+            
         }
         else
         {
             float t = 0.8 * (r.d.y + 1.0);
-            col += throughput * mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t);
+            if(SCENE == 0){
+                col += throughput * mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t);
+            } else if(SCENE == 1 || SCENE == 2 || SCENE == 3){
+                // Background color for other scenes
+                col += throughput * SRGBToLinear(texture(iChannel1, r.d).rgb);
+            }
             break;
         }
     }
@@ -370,12 +532,13 @@ void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp,
 {
     float minZoom = 5.0f; // Minimum camera distance
     float maxZoom; // Maximum camera distance
-    vec3 c_cameraAt = vec3(0.0f, 0.0f, 0.0f); // Default camera target position
+    vec3 c_cameraAt = vec3(iMouse.xy.x, iMouse.xy.y, 0.0f); // Default camera target position
     if(SCENE == 0){
-        c_cameraAt = vec3(0.0f, 0.0f, 2.0f);
-        maxZoom = 10.0f; // Set maximum zoom for Shirley Weekend scene
-    } else if(SCENE == 1){
-        c_cameraAt = vec3(0.0f, -1.0f, 20.0f);
+        c_cameraAt = vec3(0.0f, 0.0f, 1.0f);
+        maxZoom = 9.0f; // Set maximum zoom for Shirley Weekend scene
+    } else if(SCENE == 1 || SCENE == 2 || SCENE == 3) {
+        minZoom = 10.0f;
+        c_cameraAt = vec3(0.0f, -3.0f, 10.0f);
         maxZoom = 40.0f; // Set maximum zoom for the other scene
     } 
     // Get mouse scroll input to simulate zoom (iMouse.z controls zooming)
@@ -412,7 +575,9 @@ void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp,
 }
 
 
+
 #define MAX_SAMPLES 10000.0
+
 
 void main()
 {
