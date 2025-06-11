@@ -10,7 +10,7 @@
 #iChannel1::Type "CubeMap"
 #iKeyboard
  
-#define SCENE 1
+#define SCENE 2
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -488,27 +488,29 @@ vec3 rayColor(Ray r)
                 // if the material is emissive, add its color to the output
                 col +=  rec.material.emissive * throughput;
             }
-            if(SCENE == 0){
+            if(SCENE == 0){  
+
                 pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
                 pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
                 pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
-                
+
                 col += directlighting(l1, r, rec) * throughput;
                 col += directlighting(l2, r, rec) * throughput;
                 col += directlighting(l3, r, rec) * throughput;
+
             } else if(SCENE == 1){
 
                 quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
                 col += directlighting(l4, r, rec) * throughput;     
 
-            } else if(SCENE == 3){
-                pointLight l1 = createPointLight(vec3(-10.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
-                pointLight l2 = createPointLight(vec3(10.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
-                pointLight l3 = createPointLight(vec3(0.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
+            }else if(SCENE == 2){
 
-                col += directlighting(l1, r, rec) * throughput;
-                col += directlighting(l2, r, rec) * throughput;
-                col += directlighting(l3, r, rec) * throughput;
+                quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
+                col += directlighting(l4, r, rec) * throughput;
+            
+            }else if(SCENE == 3){
+                quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
+                col += directlighting(l4, r, rec) * throughput; 
             }
             
 
