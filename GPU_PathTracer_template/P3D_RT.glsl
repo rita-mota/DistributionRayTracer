@@ -10,7 +10,7 @@
 #iChannel1::Type "CubeMap"
 #iKeyboard
  
-#define SCENE 1
+#define SCENE 2
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -38,6 +38,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
             //rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
             rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.6);
             //rec.material = createPlasticMaterial(vec3(0.0, 0.5, 1.0), 0.0);
+            //rec.material = createPlasticMaterial(vec3(1.0, 0.0, 1.0), 0.4);
         }
 
         if(hit_sphere(createSphere(vec3(-1.5, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
@@ -262,7 +263,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
             {
                 hit = true;
                 float r = float(sphereIndex) / float(c_numSpheres-1) * 0.1f;
-                rec.material = createPlasticMaterial(vec3(1.0, 0.0, 1.0), r);
+                rec.material = createPlasticMaterial(vec3(1.0, 0.2, 1.0), r);
             }
         }
     #elif SCENE == 3

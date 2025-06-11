@@ -391,21 +391,37 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         float prob = (reflectProb.r + reflectProb.g + reflectProb.b) / 3.0;
         vec3 ks = reflectProb;
         vec3 kd = 1.0 - ks; //diffuse color
-        if( hash1(gSeed) < prob){ //Reflection
+        // if( hash1(gSeed) < prob){ //Reflection
+        //     vec3 reflectDir = reflect(rIn.d, N);
+        //     reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
+        //     rScattered = createRay(rec.pos + N * epsilon, reflectDir);          
+        //     if (dot(reflectDir, N) > 0.0) {
+        //         atten = BRDF_GGX(N, V, reflectDir, F0, roughness);
+        //         //atten = rec.material.specColor;
+        //         atten = F0;
+        //     }
+        // }
+        // else {
+        //     vec3 scatterDir = randomUnitVector(gSeed); // hemisphere sample
+        //     if (dot(scatterDir, N) < 0.0)
+        //         scatterDir = -scatterDir;
+        //     rScattered = createRay(rec.pos + N * epsilon, scatterDir);
+        //     atten = kd * rec.material.albedo/pi;
+        //     //atten =  BRDF_GGX(N, V, scatterDir, F0, roughness);
+        // }
+        if (hash1(gSeed) < prob) {
             vec3 reflectDir = reflect(rIn.d, N);
-            reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
-            rScattered = createRay(rec.pos + N * epsilon, reflectDir);          
+            reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);
+            rScattered = createRay(rec.pos + N * epsilon, reflectDir);
             if (dot(reflectDir, N) > 0.0) {
-                atten = BRDF_GGX(N, V, lightDir, F0, roughness);
-                //atten = rec.material.specColor;
+                // Only apply attenuation for probabilistic branching
+                atten = F0 / (prob); // Fresnel reflectance scaled by the probability of reflection
             }
-        }
-        else {
-            vec3 scatterDir = randomUnitVector(gSeed); // hemisphere sample
-            if (dot(scatterDir, N) < 0.0)
-                scatterDir = -scatterDir;
+        } else {
+            // Diffuse scatter
+            vec3 scatterDir = normalize(N + randomInUnitSphere(gSeed));
             rScattered = createRay(rec.pos + N * epsilon, scatterDir);
-            atten = kd * rec.material.albedo/pi;
+            atten = kd * rec.material.albedo / pi / (1.0 - prob);
         }
         return true;  
     }
