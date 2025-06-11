@@ -7,7 +7,7 @@
 #include "./common.glsl"
 #iChannel0 "self"
  
-#define SCENE 1
+#define SCENE 2
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -32,7 +32,9 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
         if(hit_sphere(createSphere(vec3(4.0, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
         {
             hit = true;
-            rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
+            //rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
+            rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.6);
+            //rec.material = createPlasticMaterial(vec3(0.0, 0.5, 1.0), 0.0);
         }
 
         if(hit_sphere(createSphere(vec3(-1.5, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
@@ -120,16 +122,16 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 
         // diffuse floor
         
-            vec3 A = vec3(-25.0f, -12.5f, 10.0f);
-            vec3 B = vec3( 25.0f, -12.5f, 10.0f);
-            vec3 C = vec3( 25.0f, -12.5f, -5.0f);
-            vec3 D = vec3(-25.0f, -12.5f, -5.0f);
+        vec3 A = vec3(-25.0f, -12.5f, 10.0f);
+        vec3 B = vec3( 25.0f, -12.5f, 10.0f);
+        vec3 C = vec3( 25.0f, -12.5f, -5.0f);
+        vec3 D = vec3(-25.0f, -12.5f, -5.0f);
 
-            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
-            {
-                hit = true;
-                rec.material = createDiffuseMaterial(vec3(0.7));
-            }
+        if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+        {
+            hit = true;
+            rec.material = createDiffuseMaterial(vec3(0.7));
+        }
 
         //stripped background
         {
@@ -190,6 +192,76 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
         }
 
     #elif SCENE == 2
+        // diffuse floor
+        
+        vec3 A = vec3(-25.0f, -12.5f, 10.0f);
+        vec3 B = vec3( 25.0f, -12.5f, 10.0f);
+        vec3 C = vec3( 25.0f, -12.5f, -5.0f);
+        vec3 D = vec3(-25.0f, -12.5f, -5.0f);
+
+        if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+        {
+            hit = true;
+            rec.material = createDiffuseMaterial(vec3(0.7));
+        }
+
+        //stripped background
+        {
+            vec3 A = vec3(-25.0f, -10.5f, -5.0f);
+            vec3 B = vec3( 25.0f, -10.5f, -5.0f);
+            vec3 C = vec3( 25.0f, -1.5f, -5.0f);
+            vec3 D = vec3(-25.0f, -1.5f, -5.0f);
+        
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                float shade = floor(mod(rec.pos.x, 1.0f) * 2.0f);
+                rec.material = createDiffuseMaterial(vec3(shade));
+            }
+        }
+
+        // ceiling piece above light
+        
+        {
+            vec3 A = vec3(-7.5f, 12.5f, 5.0f);
+            vec3 B = vec3( 7.5f, 12.5f, 5.0f);
+            vec3 C = vec3( 7.5f, 12.5f, -5.0f);
+            vec3 D = vec3(-7.5f, 12.5f, -5.0f);
+
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7));
+            }
+        }    
+       
+        // light
+        
+        {
+            vec3 A = vec3(-5.0f, 12.3f,  2.5f);
+            vec3 B = vec3( 5.0f, 12.3f,  2.5f);
+            vec3 C = vec3( 5.0f, 12.3f,  -2.5f);
+            vec3 D = vec3(-5.0f, 12.3f,  -2.5f);
+
+             if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.0));
+                rec.material.emissive = vec3(1.0f, 0.9f, 0.9f) * 20.0f;
+            }
+        }
+ 
+        const int c_numSpheres = 7;
+        for (int sphereIndex = 0; sphereIndex < c_numSpheres; ++sphereIndex)
+        {
+            vec3 center = vec3(-18.0 + 6.0 * float(sphereIndex), -8.0, 0.0);
+            if(hit_sphere(createSphere(center, 2.8),r,tmin,rec.t,rec))
+            {
+                hit = true;
+                float r = float(sphereIndex) / float(c_numSpheres-1) * 0.1f;
+                rec.material = createPlasticMaterial(vec3(1.0, 0.0, 1.0), r);
+            }
+        }
     #elif SCENE == 3
     #endif
 
@@ -203,22 +275,31 @@ vec3 directlighting(pointLight pl, Ray r, HitRecord rec){
     HitRecord dummy;
     vec3 N = normalize(rec.normal);
     
-    
-
     // 1. calculate the direction to the light source
     vec3 lightDir = normalize(pl.pos - rec.pos);
 
-    // 2. calculate the diffuse color contribution
-    diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
-    
-    // 3. calculate the specular color contribution
-    vec3 viewDir = normalize(r.d);
-    vec3 H = normalize(lightDir + viewDir); // half vector
-    shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
-    specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
+    if (dot(N, lightDir) > 0.0){
+        // 2. calculate the diffuse color contribution
+        diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
+        
+        // 3. calculate the specular color contribution
+        vec3 viewDir = normalize(r.d);
+        vec3 H = normalize(lightDir - viewDir); // half vector
+        shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
+        specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-    // 4. combine contributions and apply attenuation
-    colorOut += (diffCol + specCol);
+        vec3 F0 = rec.material.specColor;
+
+        vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
+        vec3 kd = vec3(1.0) - ks;
+
+        if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
+            specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
+        if (rec.material.type == MT_PLASTIC)
+            diffCol = kd * rec.material.albedo / pi;
+        // 4. combine contributions and apply attenuation
+        colorOut += (diffCol + specCol) * pl.color * max(dot(N, lightDir), 0.0);
+    }
     
 	return colorOut; 
 }
