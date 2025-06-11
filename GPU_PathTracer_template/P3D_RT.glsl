@@ -235,6 +235,12 @@ vec3 rayColor(Ray r)
         if(hit_world(r, 0.001, 10000.0, rec))
         {
 
+            if(rec.material.emissive != vec3(0.0))
+            {
+                // if the material is emissive, add its color to the output
+                col +=  rec.material.emissive * throughput;
+            }
+
             pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
             pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
             pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
@@ -272,22 +278,30 @@ vec3 rayColor(Ray r)
 
 // Constants for controlling zoom and camera range
 const float zoomSpeed = 0.2f; // Adjust the zoom speed (how fast the zoom happens)
-const float minZoom = 5.0f; // Minimum camera distance
-const float maxZoom = 50.0f; // Maximum camera distance
 
 // Mouse camera control parameters
 const float c_minCameraAngle = 0.01f;
 const float c_maxCameraAngle = (pi - 0.01f);
-const vec3 c_cameraAt = vec3(0.0f, 0.0f, 20.0f);
+
 
 
 void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp, out vec3 cameraRight)
 {
+    float minZoom = 5.0f; // Minimum camera distance
+    float maxZoom; // Maximum camera distance
+    vec3 c_cameraAt = vec3(0.0f, 0.0f, 0.0f); // Default camera target position
+    if(SCENE == 0){
+        c_cameraAt = vec3(0.0f, 0.0f, 2.0f);
+        maxZoom = 10.0f; // Set maximum zoom for Shirley Weekend scene
+    } else if(SCENE == 1){
+        c_cameraAt = vec3(0.0f, -1.0f, 20.0f);
+        maxZoom = 40.0f; // Set maximum zoom for the other scene
+    } 
     // Get mouse scroll input to simulate zoom (iMouse.z controls zooming)
     float scroll = iMouse.z; // Positive for zooming in, negative for zooming out
 
     // Dynamic camera distance adjustment based on scroll input
-    float cameraDistance = 20.0f; // Default camera distance
+    float cameraDistance = 5.0f; // Default camera distance
     cameraDistance = clamp(cameraDistance - scroll * zoomSpeed, minZoom, maxZoom); // Clamp to ensure it stays within the set range
     // if the mouse is at (0,0) it hasn't been moved yet, so use a default camera setup
     vec2 mouse = iMouse.xy;

@@ -230,7 +230,7 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         vec3 lightDir = normalize(rIn.o - rec.pos);
         //INSERT CODE HERE
         rScattered = createRay(rec.pos + N * epsilon, N + randomUnitVector(gSeed)); //create a scattered ray in a random direction
-        atten = rec.material.albedo * max(dot(N, lightDir), 0.0);
+        atten = rec.material.albedo * max(dot(N, rScattered.d), 0.0);
         return true;
     }
     if(rec.material.type == MT_METAL)
@@ -241,7 +241,7 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
         rScattered = createRay(rec.pos + N * epsilon, reflectDir);
         if(dot(reflectDir, N) > 0.0){
-            atten = rec.material.specColor;
+            atten = rec.material.specColor; //BRDF for metal is the specular color
         } 
         return true;
     }
