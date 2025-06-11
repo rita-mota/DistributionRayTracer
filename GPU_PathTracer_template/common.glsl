@@ -265,8 +265,8 @@ float D_GGX(float NoH, float roughness)
 
 float G1_GGX_Schlick(float NoV, float roughness)
 {
-    float r = roughness; // original
-    //float r = 0.5 * 0.5 * roughness; //Disney remapping
+    //float r = roughness; // original
+    float r = 0.5 * 0.5 * roughness; //Disney remapping
     float k = (r * r) / 2.0;
     float denom = NoV * (1.0 - k) + k;
     return max(NoV, 0.0) / (denom + epsilon);
@@ -357,7 +357,7 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
             vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
             reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
-            if (dot(reflectDir, N) > 0.0) atten =  vec3(1.0, 1.0, 1.0);;
+            if (dot(reflectDir, N) > 0.0) atten =  vec3(1.0, 1.0, 1.0);
         }
         else { //Refraction
             vec3 refractDir = refract(normalize(rIn.d), N , eta);
@@ -365,7 +365,7 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
             rScattered = createRay(rec.pos - N * epsilon, refractDir);
             if(!outside) {
                 vec3 one = vec3(1.0, 1.0, 1.0); //white color
-                atten =   exp( -rec.material.refractColor * rec.t); //absorption color for the refracted ray;
+                atten = exp( -rec.material.refractColor * rec.t); //absorption color for the refracted ray;
             }         
         }
         return true;  
