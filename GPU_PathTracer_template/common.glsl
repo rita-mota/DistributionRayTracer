@@ -604,3 +604,23 @@ pointLight createPointLight(vec3 pos, vec3 color)
     l.color = color;
     return l;
 }
+
+struct quadLight {
+    vec3 pos;
+    vec3 color;
+    vec3 e1, e2;
+    float area;
+    vec3 normal;
+};
+
+quadLight createQuadLight(vec3 pos, vec3 color, vec3 v1, vec3 v2)
+{
+    quadLight l;
+    l.pos = pos;
+    l.color = color;
+    l.e1 = pos - v1;
+    l.e2 = pos - v2;
+    l.area = length(cross(l.e1, l.e2));
+    l.normal = normalize(cross(l.e1, l.e2));
+    return l;
+}
