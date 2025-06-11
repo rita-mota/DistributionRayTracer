@@ -6,12 +6,11 @@
 
 #include "./common.glsl"
 #iChannel0 "self"
-#iChannel1 "file://cubemaps/forest_{}.png" // Use a single wildcard for CubeMap
+#iChannel1 "file://cubemaps/yokohama_{}.jpg" // Use a single wildcard for CubeMap
 #iChannel1::Type "CubeMap"
 #iKeyboard
  
-#define SCENE 2
-#define SCENE 2
+#define SCENE 0
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -36,10 +35,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
         if(hit_sphere(createSphere(vec3(4.0, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
         {
             hit = true;
-            //rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
-            rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.6);
-            //rec.material = createPlasticMaterial(vec3(0.0, 0.5, 1.0), 0.0);
-            //rec.material = createPlasticMaterial(vec3(1.0, 0.0, 1.0), 0.4);
+            rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.1);
         }
 
         if(hit_sphere(createSphere(vec3(-1.5, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
