@@ -6,7 +6,7 @@
 
 #include "./common.glsl"
 #iChannel0 "self"
-#iChannel1 "file://cubemaps/yokohama_{}.jpg" // Use a single wildcard for CubeMap
+#iChannel1 "file://cubemaps/forest_{}.png" // Use a single wildcard for CubeMap
 #iChannel1::Type "CubeMap"
 #iKeyboard
  
@@ -262,7 +262,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
             {
                 hit = true;
                 float r = float(sphereIndex) / float(c_numSpheres-1) * 0.1f;
-                rec.material = createPlasticMaterial(vec3(1.0, 0.0, 1.0), r);
+                rec.material = createPlasticMaterial(vec3(0.9, 0.25, 0.25), r);
             }
         }
     #elif SCENE == 3
@@ -363,6 +363,26 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
                 rec.material = createDiffuseMaterial(vec3(0.75f, 0.9f, 0.9f));
         }
    
+    #elif SCENE == 4  // Pool scene
+        // Pool floor (concrete)
+        if (hit_quad(createQuad(vec3(-10.0, -5.0, 10.0), vec3(10.0, -5.0, 10.0), vec3(10.0, -5.0, -10.0), vec3(-10.0, -5.0, -10.0)), r, tmin, rec.t, rec)) {
+            hit = true;
+            rec.material = createDiffuseMaterial(vec3(0.7, 0.7, 0.7));
+        }
+
+        // Water surface (with slight waves)
+        if (hit_quad(createQuad(vec3(-10.0, 0.0, 10.0), vec3(10.0, 0.0, 10.0), vec3(10.0, 0.0, -10.0), vec3(-10.0, 0.0, -10.0)), r, tmin, rec.t, rec)) {
+            hit = true;
+            // rec.normal += 0.1 * hash3(gSeed); // Fake waves
+            // rec.normal = normalize(rec.normal);
+            rec.material = createDielectricMaterial(vec3(0.8, 0.9, 1.0), 1.33, 0.1);
+        }
+
+        // Red ball (half-submerged)
+        if (hit_sphere(createSphere(vec3(0.0, -1.0, 0.0), 1.0), r, tmin, rec.t, rec)) {
+            hit = true;
+            rec.material = createPlasticMaterial(vec3(1.0, 0.0, 0.0), 0.2);
+        }
         
     #endif
 
@@ -384,17 +404,6 @@ vec3 directlighting(quadLight l, Ray r, HitRecord rec){
 
     if (dot(N, lightDir) > 0.0){
 
-        // // Direction and distance to light
-        // vec3 lightDir = pl.pos - rec.pos;
-        // float distToLight = length(lightDir);
-        // lightDir = normalize(lightDir);
-
-        // // HARD SHADOWS: Cast a ray to the light
-        // Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
-        // HitRecord shadowHit;
-        // if (hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
-        //     return vec3(0.0); // In shadow: no light contribution
-        // }
 
         // Diffuse
         vec3 diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
@@ -405,17 +414,17 @@ vec3 directlighting(quadLight l, Ray r, HitRecord rec){
         float shininess = 8.0 / (pow(rec.material.roughness, 4.0) + epsilon) - 2.0;
         vec3 specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-            vec3 F0 = rec.material.specColor;
+        vec3 F0 = rec.material.specColor;
 
-            vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
-            vec3 kd = vec3(1.0) - ks;
+        vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
+        vec3 kd = vec3(1.0) - ks;
 
-            if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
-                specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
-            if (rec.material.type == MT_PLASTIC)
-                diffCol = kd * rec.material.albedo / pi;
-            // 4. combine contributions and apply attenuation
-            colorOut += (diffCol + specCol) * l.color * max(dot(N, lightDir), 0.0);
+        if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
+            specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
+        if (rec.material.type == MT_PLASTIC)
+            diffCol = kd * rec.material.albedo / pi;
+        // 4. combine contributions and apply attenuation
+        colorOut += (diffCol + specCol) * l.color * max(dot(N, lightDir), 0.0);
     }
     
 	return colorOut; 
@@ -511,6 +520,12 @@ vec3 rayColor(Ray r)
             }else if(SCENE == 3){
                 quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
                 col += directlighting(l4, r, rec) * throughput; 
+            } else if(SCENE == 4){
+                // Pool lights (optional)
+                pointLight light1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0) * 10.0);
+                //pointLight light2 = createPointLight(vec3(-5.0, 4.0, 5.0), vec3(1.0, 1.0, 1.0) * 10.0);
+                col += directlighting(light1, r, rec) * throughput;
+                //col += directlighting(light2, r, rec) * throughput;
             }
             
 
@@ -551,6 +566,9 @@ vec3 rayColor(Ray r)
             } else if(SCENE == 1 || SCENE == 2 || SCENE == 3){
                 // Background color for other scenes
                 col += throughput * SRGBToLinear(texture(iChannel1, r.d).rgb);
+            } else if(SCENE == 4){
+                // Pool scene background color
+                col += throughput * mix(vec3(0.2, 0.4, 0.6), vec3(0.1, 0.2, 0.3), t);
             }
             break;
         }
@@ -575,7 +593,7 @@ void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp,
     if(SCENE == 0){
         c_cameraAt = vec3(0.0f, 0.0f, 1.0f);
         maxZoom = 9.0f; // Set maximum zoom for Shirley Weekend scene
-    } else if(SCENE == 1 || SCENE == 2 || SCENE == 3) {
+    } else if(SCENE == 1 || SCENE == 2 || SCENE == 3 || SCENE == 4) {
         minZoom = 10.0f;
         c_cameraAt = vec3(0.0f, -3.0f, 10.0f);
         maxZoom = 40.0f; // Set maximum zoom for the other scene
