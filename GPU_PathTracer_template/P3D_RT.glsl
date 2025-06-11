@@ -374,7 +374,7 @@ void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp,
     if(SCENE == 0){
         c_cameraAt = vec3(0.0f, 0.0f, 2.0f);
         maxZoom = 10.0f; // Set maximum zoom for Shirley Weekend scene
-    } else if(SCENE == 1){
+    } else if(SCENE == 1 || SCENE == 2){
         c_cameraAt = vec3(0.0f, -1.0f, 20.0f);
         maxZoom = 40.0f; // Set maximum zoom for the other scene
     } 
