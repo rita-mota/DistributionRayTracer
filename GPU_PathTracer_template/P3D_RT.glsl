@@ -369,7 +369,6 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
     return hit;
 }
 
-
 vec3 directlighting(quadLight l, Ray r, HitRecord rec){
     vec3 diffCol, specCol;
     vec3 colorOut = vec3(0.0, 0.0, 0.0);
@@ -384,47 +383,39 @@ vec3 directlighting(quadLight l, Ray r, HitRecord rec){
     vec3 lightDir = normalize(l.pos - rec.pos);
 
     if (dot(N, lightDir) > 0.0){
-        // 2. calculate the diffuse color contribution
-        diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
-        
-        // 3. calculate the specular color contribution
-        vec3 viewDir = normalize(r.d);
-        vec3 H = normalize(lightDir - viewDir); // half vector
-        shininess = 8.0 / (pow(rec.material.roughness, 4.0)+epsilon) - 2.0;
-        specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-    // Direction and distance to light
-    vec3 lightDir = pl.pos - rec.pos;
-    float distToLight = length(lightDir);
-    lightDir = normalize(lightDir);
+        // // Direction and distance to light
+        // vec3 lightDir = pl.pos - rec.pos;
+        // float distToLight = length(lightDir);
+        // lightDir = normalize(lightDir);
 
-    // HARD SHADOWS: Cast a ray to the light
-    Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
-    HitRecord shadowHit;
-    if (hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
-        return vec3(0.0); // In shadow: no light contribution
-    }
+        // // HARD SHADOWS: Cast a ray to the light
+        // Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
+        // HitRecord shadowHit;
+        // if (hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
+        //     return vec3(0.0); // In shadow: no light contribution
+        // }
 
-    // Diffuse
-    vec3 diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
+        // Diffuse
+        vec3 diffCol = rec.material.albedo * max(dot(N, lightDir), 0.0);
 
-    // Specular
-    vec3 viewDir = normalize(-r.d);
-    vec3 H = normalize(lightDir + viewDir);
-    float shininess = 8.0 / (pow(rec.material.roughness, 4.0) + epsilon) - 2.0;
-    vec3 specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
+        // Specular
+        vec3 viewDir = normalize(-r.d);
+        vec3 H = normalize(lightDir + viewDir);
+        float shininess = 8.0 / (pow(rec.material.roughness, 4.0) + epsilon) - 2.0;
+        vec3 specCol = rec.material.specColor * pow(max(dot(N, H), 0.0), shininess);
 
-        vec3 F0 = rec.material.specColor;
+            vec3 F0 = rec.material.specColor;
 
-        vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
-        vec3 kd = vec3(1.0) - ks;
+            vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
+            vec3 kd = vec3(1.0) - ks;
 
-        if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
-            specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
-        if (rec.material.type == MT_PLASTIC)
-            diffCol = kd * rec.material.albedo / pi;
-        // 4. combine contributions and apply attenuation
-        colorOut += (diffCol + specCol) * l.color * max(dot(N, lightDir), 0.0);
+            if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
+                specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
+            if (rec.material.type == MT_PLASTIC)
+                diffCol = kd * rec.material.albedo / pi;
+            // 4. combine contributions and apply attenuation
+            colorOut += (diffCol + specCol) * l.color * max(dot(N, lightDir), 0.0);
     }
     
 	return colorOut; 
@@ -442,6 +433,16 @@ vec3 directlighting(pointLight l, Ray r, HitRecord rec){
 
     // 1. calculate the direction to the light source
     vec3 lightDir = normalize(l.pos - rec.pos);
+
+    // Direction and distance to light
+    float distToLight = length(lightDir);
+
+    // HARD SHADOWS: Cast a ray to the light
+    Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
+    HitRecord shadowHit;
+    if (hit_world(shadowRay, 0.001, distToLight - 0.001, shadowHit)) {
+        return vec3(0.0); // In shadow: no light contribution
+    }
 
     if (dot(N, lightDir) > 0.0){
         // 2. calculate the diffuse color contribution
@@ -488,18 +489,19 @@ vec3 rayColor(Ray r)
                 col +=  rec.material.emissive * throughput;
             }
             if(SCENE == 0){
-                //pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
-                //pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
-                //pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
-            quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
+                pointLight l1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0));
+                pointLight l2 = createPointLight(vec3(8.0, 15.0, 3.0), vec3(1.0, 1.0, 1.0));
+                pointLight l3 = createPointLight(vec3(1.0, 15.0, -9.0), vec3(1.0, 1.0, 1.0));
+                
+                col += directlighting(l1, r, rec) * throughput;
+                col += directlighting(l2, r, rec) * throughput;
+                col += directlighting(l3, r, rec) * throughput;
+            } else if(SCENE == 1){
 
-                //col += directlighting(l1, r, rec) * throughput;
-                //col += directlighting(l2, r, rec) * throughput;
-                //col += directlighting(l3, r, rec) * throughput;
-            col += directlighting(l4, r, rec) * throughput;
-            }
+                quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
+                col += directlighting(l4, r, rec) * throughput;     
 
-            if(SCENE == 3){
+            } else if(SCENE == 3){
                 pointLight l1 = createPointLight(vec3(-10.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
                 pointLight l2 = createPointLight(vec3(10.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
                 pointLight l3 = createPointLight(vec3(0.0, 15.0, 20.0), vec3(1.0, 1.0, 1.0));
