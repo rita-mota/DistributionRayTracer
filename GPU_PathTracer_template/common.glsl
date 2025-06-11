@@ -232,7 +232,7 @@ float schlick(float cosine, float n1, float n2)
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * pow(max(1.0 - cosTheta,0.0), 5.0);
 }
 
 float D_GGX(float NoH, float roughness)
@@ -246,8 +246,8 @@ float D_GGX(float NoH, float roughness)
 
 float G1_GGX_Schlick(float NoV, float roughness)
 {
-    //float r = roughness; // original
-    float r = 0.5 * 0.5 * roughness; //Disney remapping
+    float r = roughness; // original
+    //float r = 0.5 * 0.5 * roughness; //Disney remapping
     float k = (r * r) / 2.0;
     float denom = NoV * (1.0 - k) + k;
     return max(NoV, 0.0) / (denom + epsilon);
@@ -265,13 +265,13 @@ vec3 BRDF_GGX(vec3 N, vec3 V, vec3 L, vec3 F0, float roughness) {
     float NoV = max(dot(N, V), 0.0);
     float NoL = max(dot(N, L), 0.0);
     float NoH = max(dot(N, H), 0.0);
-    float VoH = max(dot(V, H), 0.0);
+    float costheta = max(dot(V, H),0.0); 
 
     float D = D_GGX(NoH, roughness);
     float G = G_Smith(NoV, NoL, roughness);
-    vec3 F = fresnelSchlick(VoH, F0);
+    vec3 F = fresnelSchlick(costheta, F0);
 
-    vec3 numerator = D * G * F;
+    vec3 numerator = (D * G) * F;
     float denominator = 4.0 * NoV * NoL;
 
     return numerator / (denominator + epsilon);
@@ -287,46 +287,28 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
     if(rec.material.type == MT_DIFFUSE)
     {
         vec3 lightDir = normalize(rIn.o - rec.pos);
-        //INSERT CODE HERE
         rScattered = createRay(rec.pos + N * epsilon, N + randomUnitVector(gSeed)); //create a scattered ray in a random direction
         atten = rec.material.albedo * max(dot(N, lightDir), 0.0);
         return true;
     }
     if(rec.material.type == MT_METAL)
     {
-        vec3 lightDir = normalize(rIn.o - rec.pos);
+        // vec3 lightDir = normalize(rIn.o - rec.pos);
         vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
         reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
-        rScattered = createRay(rec.pos + N * epsilon, reflectDir);
+
         if(dot(reflectDir, N) > 0.0){
+            rScattered = createRay(rec.pos + N * epsilon, reflectDir);
             if (rec.material.roughness > epsilon) {
                 vec3 F0 = rec.material.specColor;
                 float roughness = rec.material.roughness;
-                atten = BRDF_GGX(N, V, lightDir, F0, roughness);
+                atten = BRDF_GGX(N, V, reflectDir, F0, roughness);
             } else {
                 atten = rec.material.specColor; //fuzzy reflection
             }
             atten = rec.material.specColor;
+            return true;
         } 
-        return true;
-
-
-        // if (roughness < epsilon){
-        //     reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);       
-        //     if(dot(reflectDir, N) > 0.0){
-        //         atten = rec.material.specColor * max(dot(N, rScattered.d), 0.0);
-        //     } 
-        // } else {
-        //     vec3 lightDir = normalize(rIn.o - rec.pos);
-        //     vec3 F0 = rec.material.specColor;
-        //     vec3 H = normalize(lightDir + V);
-        //     float NdotL = max(dot(N, lightDir), 0.0);
-        //     //reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);  
-        //     if(dot(reflectDir, N) > 0.0){
-        //         //atten = BRDF_GGX(N, V, lightDir, F0, roughness) * max(dot(N, rScattered.d), 0.0); //calculate the BRDF for the metal material
-        //     } 
-        // }
-        //reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);       
     }
     if(rec.material.type == MT_DIELECTRIC) // fuzzy reflections and refractions
     {   
@@ -378,19 +360,36 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         }
         return true;  
     }
-    // if (rec.material.type == MT_PLASTIC){
-    //     float roughness = rec.material.roughness;
-    //     vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
-    //     rScattered = createRay(rec.pos + N * epsilon, reflectDir);
-    //     vec3 lightDir = normalize(rIn.o - rec.pos);
-    //     vec3 F0 = rec.material.specColor;
-    //     vec3 H = normalize(lightDir + V);
-    //     float NdotL = max(dot(N, lightDir), 0.0);
-    //     reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);  
-    //     if(dot(reflectDir, N) > 0.0){
-    //         atten = rec.material.albedo/pi + BRDF_GGX(N, V, lightDir, F0, roughness) * max(dot(N, rScattered.d), 0.0); //calculate the BRDF for the metal material
-    //     } 
-    // }
+    if (rec.material.type == MT_PLASTIC){
+        vec3 lightDir = normalize(rIn.o - rec.pos);
+        vec3 H = normalize(V + lightDir); //half vector
+        vec3 V = normalize(-rIn.d); //view vector
+        vec3 F0 = rec.material.specColor;
+        float roughness = rec.material.roughness;
+
+        float costheta = dot(V, H); 
+        vec3 reflectProb = fresnelSchlick(costheta, F0); //calculate the reflect probability
+        float prob = (reflectProb.r + reflectProb.g + reflectProb.b) / 3.0;
+        vec3 ks = reflectProb;
+        vec3 kd = 1.0 - ks; //diffuse color
+        if( hash1(gSeed) < prob){ //Reflection
+            vec3 reflectDir = reflect(rIn.d, N);
+            reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
+            rScattered = createRay(rec.pos + N * epsilon, reflectDir);          
+            if (dot(reflectDir, N) > 0.0) {
+                atten = BRDF_GGX(N, V, lightDir, F0, roughness);
+                //atten = rec.material.specColor;
+            }
+        }
+        else {
+            vec3 scatterDir = randomUnitVector(gSeed); // hemisphere sample
+            if (dot(scatterDir, N) < 0.0)
+                scatterDir = -scatterDir;
+            rScattered = createRay(rec.pos + N * epsilon, scatterDir);
+            atten = kd * rec.material.albedo/pi;
+        }
+        return true;  
+    }
     return false;
 }
 
