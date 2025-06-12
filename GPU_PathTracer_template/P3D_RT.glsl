@@ -6,10 +6,11 @@
 
 #include "./common.glsl"
 #iChannel0 "self"
-#iChannel1 "file://cubemaps/forest_{}.png" // Use a single wildcard for CubeMap
+#iChannel1 "file://cubemaps/yokohama_{}.jpg" // Use a single wildcard for CubeMap
 #iChannel1::Type "CubeMap"
 #iKeyboard
  
+#define SCENE 0
 #define SCENE 0
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
@@ -490,7 +491,7 @@ vec3 directlighting(quadLight l, Ray r, HitRecord rec){
     vec3 lightpos = l.pos + l.e1 * hash2(gSeed).x + l.e2 * hash2(gSeed).y;
 
     // 1. calculate the direction to the light source
-    vec3 lightDir = normalize(l.pos - rec.pos);
+    vec3 lightDir = normalize(lightpos - rec.pos);
 
     if (dot(N, lightDir) > 0.0){
 
@@ -531,10 +532,12 @@ vec3 directlighting(pointLight l, Ray r, HitRecord rec){
     vec3 lightpos = l.pos;
 
     // 1. calculate the direction to the light source
-    vec3 lightDir = normalize(l.pos - rec.pos);
+    vec3 lightDir = lightpos - rec.pos;
 
     // Direction and distance to light
     float distToLight = length(lightDir);
+
+    lightDir = normalize(lightDir);
 
     // HARD SHADOWS: Cast a ray to the light
     Ray shadowRay = createRay(rec.pos + N * 0.001, lightDir);
@@ -650,7 +653,7 @@ vec3 rayColor(Ray r)
         }
         else
         {
-            float t = 0.8 * (r.d.y + 1.0);
+            float t = clamp(0.8 * (r.d.y + 1.0), 0.0, 1.0);
             if(SCENE == 0){
                 col += throughput * mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t);
             } else if(SCENE == 1 || SCENE == 3){

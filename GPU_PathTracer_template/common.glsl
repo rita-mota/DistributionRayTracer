@@ -265,8 +265,8 @@ float D_GGX(float NoH, float roughness)
 
 float G1_GGX_Schlick(float NoV, float roughness)
 {
-    float r = roughness; // original
-    //float r = 0.5 * 0.5 * roughness; //Disney remapping
+    //float r = roughness; // original
+    float r = 0.5 * 0.5 * roughness; //Disney remapping
     float k = (r * r) / 2.0;
     float denom = NoV * (1.0 - k) + k;
     return max(NoV, 0.0) / (denom + epsilon);
@@ -312,19 +312,11 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
     }
     if(rec.material.type == MT_METAL)
     {
-        // vec3 lightDir = normalize(rIn.o - rec.pos);
         vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
         reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
 
         if(dot(reflectDir, N) > 0.0){
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
-            if (rec.material.roughness > epsilon) {
-                vec3 F0 = rec.material.specColor;
-                float roughness = rec.material.roughness;
-                atten = BRDF_GGX(N, V, reflectDir, F0, roughness);
-            } else {
-                atten = rec.material.specColor; //fuzzy reflection
-            }
             atten = rec.material.specColor;
             return true;
         } 
@@ -366,7 +358,7 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
             vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
             reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
-            if (dot(reflectDir, N) > 0.0) atten =  vec3(1.0,1.0,1.0);
+            if (dot(reflectDir, N) > 0.0) atten =  vec3(1.0, 1.0, 1.0);
         }
         else { //Refraction
             vec3 refractDir = refract(normalize(rIn.d), N , eta);
@@ -374,9 +366,8 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
             rScattered = createRay(rec.pos - N * epsilon, refractDir);
             if(!outside) {
                 vec3 one = vec3(1.0, 1.0, 1.0); //white color
-                atten =   exp( -rec.material.refractColor * rec.t); //absorption color for the refracted ray;
-            } 
-            
+                atten = exp( -rec.material.refractColor * rec.t); //absorption color for the refracted ray;
+            }         
         }
         return true;  
     }
@@ -392,20 +383,18 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
         float prob = (reflectProb.r + reflectProb.g + reflectProb.b) / 3.0;
         vec3 ks = reflectProb;
         vec3 kd = 1.0 - ks; //diffuse color
-
         if (hash1(gSeed) < prob) {
             vec3 reflectDir = reflect(rIn.d, N);
             reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
             if (dot(reflectDir, N) > 0.0) {
-                // Only apply attenuation for probabilistic branching
                 atten = F0 / (prob); // Fresnel reflectance scaled by the probability of reflection
             }
         } else {
             // Diffuse scatter
             vec3 scatterDir = normalize(N + randomInUnitSphere(gSeed));
             rScattered = createRay(rec.pos + N * epsilon, scatterDir);
-            atten = kd * rec.material.albedo / pi / (1.0 - prob);
+            atten = (kd * rec.material.albedo / pi) / (1.0 - prob);
         }
         return true;  
     }
@@ -423,7 +412,6 @@ Triangle createTriangle(vec3 v0, vec3 v1, vec3 v2)
 
 bool hit_triangle(Triangle t, Ray r, float tmin, float tmax, out HitRecord rec)
 {
-    //INSERT YOUR CODE HERE
     vec3 e1 = t.b - t.a;
     vec3 e2 = t.c - t.a;
 
@@ -519,7 +507,6 @@ vec3 center(MovingSphere mvsphere, float time)
 
 bool hit_sphere(Sphere s, Ray r, float tmin, float tmax, out HitRecord rec)
 {
-    //INSERT YOUR CODE HERE
     //calculate a valid t and normal
     bool hit = false;
     vec3 oc = r.o - s.center;
@@ -562,7 +549,7 @@ bool hit_movingSphere(MovingSphere s, Ray r, float tmin, float tmax, out HitReco
     bool outside;
     float t;
 
-     //Calculate the moving center
+    //Calculate the moving center
     vec3 center0 = center(s, r.t);
     vec3 center1 = center(s, r.t + epsilon);
     vec3 oc = r.o - center0;
