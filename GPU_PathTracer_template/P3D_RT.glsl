@@ -10,8 +10,7 @@
 #iChannel1::Type "CubeMap"
 #iKeyboard
  
-#define SCENE 2
-#define SCENE 2
+#define SCENE 0
 
 bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
 {
@@ -36,10 +35,8 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
         if(hit_sphere(createSphere(vec3(4.0, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
         {
             hit = true;
-            //rec.material = createMetalMaterial(vec3(0.7, 0.6, 0.5), 0.0);
-            rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.6);
-            //rec.material = createPlasticMaterial(vec3(0.0, 0.5, 1.0), 0.0);
-            //rec.material = createPlasticMaterial(vec3(1.0, 0.0, 1.0), 0.4);
+            rec.material = createMetalMaterial(vec3(0.562, 0.565, 0.578), 0.4);
+
         }
 
         if(hit_sphere(createSphere(vec3(-1.5, 1.0, 0.0), 1.0),r,tmin,rec.t,rec))
@@ -196,7 +193,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
             }
         }
 
-    #elif SCENE == 2
+    #elif SCENE == 2 // Plastic Balls
         // diffuse floor
         
         vec3 A = vec3(-25.0f, -12.5f, 10.0f);
@@ -252,7 +249,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
             {
                 hit = true;
                 rec.material = createDiffuseMaterial(vec3(0.0));
-                rec.material.emissive = vec3(1.0f, 0.9f, 0.9f) * 20.0f;
+                rec.material.emissive = vec3(1.0f, 0.9f, 0.9f) * 30.0f;
             }
         }
  
@@ -267,7 +264,7 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
                 rec.material = createPlasticMaterial(vec3(0.9, 0.25, 0.25), r);
             }
         }
-    #elif SCENE == 3
+    #elif SCENE == 3 //Albedo show
 
        	// back wall
         {
@@ -364,28 +361,119 @@ bool hit_world(Ray r, float tmin, float tmax, inout HitRecord rec)
                 hit = true;
                 rec.material = createDiffuseMaterial(vec3(0.75f, 0.9f, 0.9f));
         }
-   
-    #elif SCENE == 4  // Pool scene
-        // Pool floor (concrete)
-        if (hit_quad(createQuad(vec3(-10.0, -5.0, 10.0), vec3(10.0, -5.0, 10.0), vec3(10.0, -5.0, -10.0), vec3(-10.0, -5.0, -10.0)), r, tmin, rec.t, rec)) {
-            hit = true;
-            rec.material = createDiffuseMaterial(vec3(0.7, 0.7, 0.7));
-        }
+    
+    #elif SCENE == 4 // Different Roughness
+        float wallLen = 10.0;
+        float farPoint = 24.0;
+        float nearPoint = 18.0;
 
-        // Water surface (with slight waves)
-        if (hit_quad(createQuad(vec3(-10.0, 0.0, 10.0), vec3(10.0, 0.0, 10.0), vec3(10.0, 0.0, -10.0), vec3(-10.0, 0.0, -10.0)), r, tmin, rec.t, rec)) {
-            hit = true;
-            // rec.normal += 0.1 * hash3(gSeed); // Fake waves
-            // rec.normal = normalize(rec.normal);
-            rec.material = createDielectricMaterial(vec3(0.8, 0.9, 1.0), 1.33, 0.1);
+        // back wall
+        {
+            vec3 A = vec3(-wallLen, -wallLen, farPoint);
+            vec3 B = vec3( wallLen, -wallLen, farPoint);
+            vec3 C = vec3( wallLen,  wallLen, farPoint);
+            vec3 D = vec3(-wallLen,  wallLen, farPoint);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.7f, 0.7f));
+            }
+        }    
+        
+        // floor
+        {
+            vec3 A = vec3(-wallLen, -wallLen, farPoint);
+            vec3 B = vec3( wallLen, -wallLen, farPoint);
+            vec3 C = vec3( wallLen, -wallLen, nearPoint);
+            vec3 D = vec3(-wallLen, -wallLen, nearPoint);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.7f, 0.7f));
+            }
         }
-
-        // Red ball (half-submerged)
-        if (hit_sphere(createSphere(vec3(0.0, -1.0, 0.0), 1.0), r, tmin, rec.t, rec)) {
-            hit = true;
-            rec.material = createPlasticMaterial(vec3(1.0, 0.0, 0.0), 0.2);
+        // ceiling
+        {
+            vec3 A = vec3(-wallLen, wallLen, farPoint);
+            vec3 B = vec3( wallLen, wallLen, farPoint);
+            vec3 C = vec3( wallLen, wallLen, nearPoint);
+            vec3 D = vec3(-wallLen, wallLen, nearPoint);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.7f, 0.7f));
+            }       
+        }    
+        
+        // left wall
+        {
+            vec3 A = vec3(-wallLen, -wallLen, farPoint);
+            vec3 B = vec3(-wallLen, -wallLen, nearPoint);
+            vec3 C = vec3(-wallLen,  wallLen, nearPoint);
+            vec3 D = vec3(-wallLen,  wallLen, farPoint);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.7f, 0.1f, 0.1f));
+            }      
         }
         
+        // right wall 
+        {
+            vec3 A = vec3(wallLen, -wallLen, farPoint);
+            vec3 B = vec3(wallLen, -wallLen, nearPoint);
+            vec3 C = vec3(wallLen,  wallLen, nearPoint);
+            vec3 D = vec3(wallLen,  wallLen, farPoint);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.1f, 0.7f, 0.1f));
+            }      
+        }    
+        
+        // light
+        {
+            float pad = 2.0;
+            vec3 A = vec3(-wallLen + pad*2.0, wallLen - 0.1, farPoint - pad);
+            vec3 B = vec3( wallLen - pad*2.0, wallLen - 0.1, farPoint - pad);
+            vec3 C = vec3( wallLen - pad*2.0, wallLen - 0.1, nearPoint + pad);
+            vec3 D = vec3(-wallLen + pad*2.0, wallLen - 0.1, nearPoint + pad);
+            if(hit_quad(createQuad(A, B, C, D), r, tmin, rec.t, rec))
+            {
+                hit = true;
+                rec.material = createDiffuseMaterial(vec3(0.0));
+                rec.material.emissive = vec3(1.0f, 0.9f, 0.7f) * 20.0f;
+            }
+    
+        }
+
+        // Balls
+        for (int i = 0; i < 5; i++) {
+
+            if(hit_sphere(createSphere(vec3(-6.0 + float(i*3), -7.5, 18.0), 1.5),r,tmin,rec.t,rec))
+            {
+                hit = true;
+                rec.material = createMetalMaterial(vec3(0.8f, 1.0f, 1.0f), float(i) / 3.0 );
+            }
+        }
+        
+        for (int i = 0; i < 5; i++) {
+            if(hit_sphere(createSphere(vec3(-6.0 + float(i*3), -7.5 + 4.0, 20.0), 1.5),r,tmin,rec.t,rec))
+            {
+                hit = true;
+                rec.material = createPlasticMaterial(vec3(0.8f, 1.0f, 0.6f), float(i) / 3.0 );
+            }
+        }
+        
+        for (int i = 0; i < 5; i++) {
+            if(hit_sphere(createSphere(vec3(-6.0 + float(i*3), -7.5 + 4.0 + 4.0, 22.0), 1.5),r,tmin,rec.t,rec))
+            {
+                hit = true;
+                rec.material = createPlasticMaterial(vec3(1.0f, 0.8f, 0.7f),0.0);
+            }
+        }
+        
+    
     #endif
 
     return hit;
@@ -520,15 +608,15 @@ vec3 rayColor(Ray r)
                 col += directlighting(l4, r, rec) * throughput;
             
             }else if(SCENE == 3){
+
                 quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
                 col += directlighting(l4, r, rec) * throughput; 
+
             } else if(SCENE == 4){
-                // Pool lights (optional)
-                pointLight light1 = createPointLight(vec3(-10.0, 15.0, 0.0), vec3(1.0, 1.0, 1.0) * 10.0);
-                //pointLight light2 = createPointLight(vec3(-5.0, 4.0, 5.0), vec3(1.0, 1.0, 1.0) * 10.0);
-                col += directlighting(light1, r, rec) * throughput;
-                //col += directlighting(light2, r, rec) * throughput;
-            }
+
+                quadLight l4 = createQuadLight(vec3( 5.0f, 12.3f,  2.5f), vec3(1.0, 1.0, 1.0), vec3( -5.0f, 12.3f,  2.5f), vec3( 5.0f, 12.3f,  -2.5f));
+                col += directlighting(l4, r, rec) * throughput; 
+            } 
             
 
             //calculate secondary ray and update throughput
@@ -565,12 +653,13 @@ vec3 rayColor(Ray r)
             float t = 0.8 * (r.d.y + 1.0);
             if(SCENE == 0){
                 col += throughput * mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t);
-            } else if(SCENE == 1 || SCENE == 2 || SCENE == 3){
+            } else if(SCENE == 1 || SCENE == 3){
                 // Background color for other scenes
                 col += throughput * SRGBToLinear(texture(iChannel1, r.d).rgb);
-            } else if(SCENE == 4){
-                // Pool scene background color
-                col += throughput * mix(vec3(0.2, 0.4, 0.6), vec3(0.1, 0.2, 0.3), t);
+            } else if (SCENE == 2){
+                col += throughput * SRGBToLinear(texture(iChannel1, r.d).rgb) * 3.0;
+            } else if (SCENE == 4){
+                col += throughput * SRGBToLinear(texture(iChannel1, r.d).rgb) * 3.0;
             }
             break;
         }
@@ -595,11 +684,15 @@ void GetCameraVectors(out vec3 cameraPos, out vec3 cameraFwd, out vec3 cameraUp,
     if(SCENE == 0){
         c_cameraAt = vec3(0.0f, 0.0f, 1.0f);
         maxZoom = 9.0f; // Set maximum zoom for Shirley Weekend scene
-    } else if(SCENE == 1 || SCENE == 2 || SCENE == 3 || SCENE == 4) {
+    } else if(SCENE == 1 || SCENE == 2 || SCENE == 3) {
         minZoom = 10.0f;
         c_cameraAt = vec3(0.0f, -3.0f, 10.0f);
         maxZoom = 40.0f; // Set maximum zoom for the other scene
-    } 
+    } else if(SCENE == 4){
+        minZoom = 10.0f;
+        c_cameraAt = vec3(0.0f, -1.0f, 10.0f);
+        maxZoom = 15.0f;
+    }
     // Get mouse scroll input to simulate zoom (iMouse.z controls zooming)
     float scroll = iMouse.z; // Positive for zooming in, negative for zooming out
 
