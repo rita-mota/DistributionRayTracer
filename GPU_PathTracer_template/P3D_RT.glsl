@@ -507,13 +507,14 @@ vec3 directlighting(quadLight l, Ray r, HitRecord rec){
 
         vec3 F0 = rec.material.specColor;
 
-        vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
-        vec3 kd = vec3(1.0) - ks;
-
         if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
             specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
-        if (rec.material.type == MT_PLASTIC)
+        if (rec.material.type == MT_PLASTIC){
+            vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
+            vec3 kd = vec3(1.0) - ks;
             diffCol = kd * rec.material.albedo / pi;
+        }
+
         // 4. combine contributions and apply attenuation
         colorOut += (diffCol + specCol) * l.color * max(dot(N, lightDir), 0.0);
     }
@@ -558,13 +559,17 @@ vec3 directlighting(pointLight l, Ray r, HitRecord rec){
 
         vec3 F0 = rec.material.specColor;
 
-        vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
-        vec3 kd = vec3(1.0) - ks;
-
+        // If the material is METAL or PLASTIC, compute specular reflection using the GGX BRDF
         if(rec.material.type == MT_METAL || rec.material.type == MT_PLASTIC)
             specCol = BRDF_GGX(N, -viewDir, lightDir, F0, rec.material.roughness);
-        if (rec.material.type == MT_PLASTIC)
+            
+        // For PLASTIC, also compute the diffuse contribution
+        if (rec.material.type == MT_PLASTIC){
+            vec3 ks = fresnelSchlick(max(dot(N, -viewDir), 0.0), F0);
+            vec3 kd = vec3(1.0) - ks;
             diffCol = kd * rec.material.albedo / pi;
+        }
+
         // 4. combine contributions and apply attenuation
         colorOut += (diffCol + specCol) * l.color * max(dot(N, lightDir), 0.0);
     }

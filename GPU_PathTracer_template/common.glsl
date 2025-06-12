@@ -163,8 +163,7 @@ Ray getRay(Camera cam, vec2 pixel_sample)  //rnd pixel_sample viewport coordinat
     float py = ((pixel_sample.y / iResolution.y) - 0.5) * cam.height * cam.focusDist;
 
     vec3 ray_direction = cam.u * (px - ls.x) + cam.v * (py - ls.y) - cam.n * cam.focusDist * cam.planeDist;
-
-    
+   
     return createRay(eye_offset, normalize(ray_direction), time);
 }
 
@@ -241,7 +240,6 @@ struct HitRecord
     Material material;
 };
 
-
 float schlick(float cosine, float n1, float n2)
 {
     float r0 = (n1 - n2) / (n1 + n2);
@@ -286,6 +284,8 @@ vec3 BRDF_GGX(vec3 N, vec3 V, vec3 L, vec3 F0, float roughness) {
     float NoH = max(dot(N, H), 0.0);
     float costheta = max(dot(V, H),0.0); 
 
+    // Calculate the Cook-Torrance BRDF components
+    // D: Normal Distribution Function, G: Geometry Function, F: Fresnel Reflectance
     float D = D_GGX(NoH, roughness);
     float G = G_Smith(NoV, NoL, roughness);
     vec3 F = fresnelSchlick(costheta, F0);
@@ -293,6 +293,7 @@ vec3 BRDF_GGX(vec3 N, vec3 V, vec3 L, vec3 F0, float roughness) {
     vec3 numerator = (D * G) * F;
     float denominator = 4.0 * NoV * NoL;
 
+    // Return the Cook-Torrance BRDF value (with epsilon to avoid devision by zero)
     return numerator / (denominator + epsilon);
 }
 
@@ -313,7 +314,7 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
     if(rec.material.type == MT_METAL)
     {
         vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
-        reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness);
+        reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * rec.material.roughness); //fuzzy reflections
 
         if(dot(reflectDir, N) > 0.0){
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
@@ -325,12 +326,13 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
     {   
         float ior1 = 1.0;
         float ior2 = rec.material.refIdx;
+
         if(!outside) { //if inside, use the inverse of the index of refraction
             ior1 = rec.material.refIdx;
             ior2 = 1.0;
         }
-        float eta = ior1/ior2; //index of Refraction
 
+        float eta = ior1/ior2; //index of Refraction
         vec3 Vt = N * dot(N, V) - V; //calculate the tangent vector
         float sin_i = length(Vt);
         float sin_t = eta * sin_i; //calculate the sine of the angle of refraction
@@ -350,9 +352,9 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
             } else {
                 costheta = cos_i; //if inside, use the cosine of the angle of refraction
             }
-
             reflectProb = schlick(costheta, ior1, ior2); //calculate the reflect probability
         }
+
         // Decide whether to reflect or refract
         if( hash1(gSeed) < reflectProb){ //Reflection
             vec3 reflectDir = reflect(rIn.d, N); //calculate the reflected ray direction
@@ -380,18 +382,21 @@ bool scatter(Ray rIn, HitRecord rec, out vec3 atten, out Ray rScattered)
 
         float costheta = dot(V, H); 
         vec3 reflectProb = fresnelSchlick(costheta, F0); //calculate the reflect probability
+
+        // Convert vector reflectance to scalar probability for sampling decision
         float prob = (reflectProb.r + reflectProb.g + reflectProb.b) / 3.0;
-        vec3 ks = reflectProb;
-        vec3 kd = 1.0 - ks; //diffuse color
-        if (hash1(gSeed) < prob) {
+
+        vec3 ks = reflectProb;       // Specular reflectance (Fresnel)
+        vec3 kd = 1.0 - ks;          // Diffuse reflectance (energy conservation)
+
+        if (hash1(gSeed) < prob) { // Specular reflection
             vec3 reflectDir = reflect(rIn.d, N);
             reflectDir = normalize(reflectDir + randomInUnitSphere(gSeed) * roughness);
             rScattered = createRay(rec.pos + N * epsilon, reflectDir);
             if (dot(reflectDir, N) > 0.0) {
                 atten = F0 / (prob); // Fresnel reflectance scaled by the probability of reflection
             }
-        } else {
-            // Diffuse scatter
+        } else { // Diffuse scatter
             vec3 scatterDir = normalize(N + randomInUnitSphere(gSeed));
             rScattered = createRay(rec.pos + N * epsilon, scatterDir);
             atten = (kd * rec.material.albedo / pi) / (1.0 - prob);
